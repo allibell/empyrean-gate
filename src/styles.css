@@ -913,6 +913,79 @@ main {
   line-height: 1.55;
 }
 
+.scene-speed-control {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.7fr) minmax(280px, 1.3fr);
+  gap: 10px 16px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid #332a55;
+  border-radius: 9px;
+  background: rgba(10, 8, 20, 0.55);
+}
+
+.scene-speed-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scene-speed-copy strong {
+  font-size: 12px;
+}
+
+.scene-speed-copy span {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.scene-speed-presets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+}
+
+.scene-speed-presets button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 4px;
+  font-size: 10px;
+}
+
+.scene-speed-presets button span {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.scene-speed-presets button.active {
+  border-color: var(--accent2);
+  color: var(--accent2);
+  background: rgba(56, 209, 194, 0.1);
+}
+
+.scene-speed-slider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  grid-column: 1 / -1;
+}
+
+.scene-speed-slider input {
+  flex: 1;
+}
+
+.scene-speed-slider output {
+  width: 46px;
+  color: var(--accent2);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .scene-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -995,6 +1068,12 @@ main {
   }
   .saved-stack-actions button:not(.danger) {
     flex: 1;
+  }
+  .scene-speed-control {
+    grid-template-columns: 1fr;
+  }
+  .scene-speed-slider {
+    grid-column: auto;
   }
   .scene-grid {
     grid-template-columns: 1fr;

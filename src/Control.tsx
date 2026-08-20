@@ -220,6 +220,13 @@ function ScenesPanel() {
   const { client, config } = useGate();
   const [capturing, setCapturing] = useState(false);
   const [stackName, setStackName] = useState("");
+  const [sceneSpeed, setSceneSpeedLocal] = useState(1);
+  const setSceneSpeed = useThrottled((speed: number) => client.setMaster({ speed }));
+
+  useEffect(() => {
+    if (config) setSceneSpeedLocal(config.render.master_speed);
+  }, [config?.render.master_speed]);
+
   if (!config) return null;
 
   const savedStacks = config.saved_stacks ?? [];
@@ -322,6 +329,46 @@ function ScenesPanel() {
         the current layer stack; then every layer remains editable below. A restrained
         drift keeps the composition moving without changing which layers play.
       </p>
+      <div className="scene-speed-control">
+        <div className="scene-speed-copy">
+          <strong>Scene speed</strong>
+          <span>Scale every layer&apos;s motion without changing the composition.</span>
+        </div>
+        <div className="scene-speed-presets" aria-label="Scene speed presets">
+          {([
+            { value: 0.1, label: "Glacial" },
+            { value: 0.25, label: "Slow" },
+            { value: 0.5, label: "Drift" },
+            { value: 1, label: "Normal" },
+          ] as const).map((preset) => (
+            <button
+              key={preset.value}
+              className={Math.abs(sceneSpeed - preset.value) < 0.01 ? "active" : ""}
+              onClick={() => {
+                setSceneSpeedLocal(preset.value);
+                setSceneSpeed(preset.value);
+              }}
+            >
+              {preset.label}<span>{preset.value}×</span>
+            </button>
+          ))}
+        </div>
+        <label className="scene-speed-slider">
+          <input
+            type="range"
+            min={0.05}
+            max={2}
+            step={0.05}
+            value={sceneSpeed}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              setSceneSpeedLocal(value);
+              setSceneSpeed(value);
+            }}
+          />
+          <output>{sceneSpeed.toFixed(2)}×</output>
+        </label>
+      </div>
       {capturing && (
         <div className="stack-capture">
           <label>

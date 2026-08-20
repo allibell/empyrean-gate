@@ -208,11 +208,15 @@ export default function Replay() {
 
             <div className="replay-options">
               <label>
-                Playback rate
+                Playback speed
                 <select value={fps} onChange={(event) => setFps(Number(event.target.value))}>
-                  <option value={24}>24 FPS</option>
-                  <option value={30}>30 FPS</option>
-                  <option value={60}>60 FPS</option>
+                  <option value={3}>0.1× · 3 FPS</option>
+                  <option value={7.5}>0.25× · 7.5 FPS</option>
+                  <option value={15}>0.5× · 15 FPS</option>
+                  <option value={24}>0.8× · 24 FPS</option>
+                  <option value={30}>1× · 30 FPS</option>
+                  <option value={45}>1.5× · 45 FPS</option>
+                  <option value={60}>2× · 60 FPS</option>
                 </select>
               </label>
               <label className="check-row">
