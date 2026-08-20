@@ -3,33 +3,10 @@
 
 import { useEffect, useState } from "react";
 import { EFFECTS } from "./effects";
+import { SCENE_PRESETS, type ScenePreset } from "./scenes";
 import Sparkbars from "./Sparkbars";
 import { useGate, useThrottled } from "./state";
 import { LAYER_LABELS } from "./types";
-
-const LONG_PLAYS = [
-  {
-    id: "drift",
-    name: "Drift",
-    description: "Quiet, spacious changes for an ambient room.",
-    speed: 0.5,
-    depth: 0.65,
-  },
-  {
-    id: "roam",
-    name: "Roam",
-    description: "A balanced all-night wander through the scene.",
-    speed: 1,
-    depth: 1.15,
-  },
-  {
-    id: "flux",
-    name: "Flux",
-    description: "Brighter, livelier movement with quicker changes.",
-    speed: 2,
-    depth: 1.65,
-  },
-] as const;
 
 function choose(n: number, k: number): number {
   if (k < 0 || k > n) return 0;
@@ -161,7 +138,7 @@ export default function Control() {
 
       <BeatTapsPanel />
 
-      <LongPlayPanel />
+      <ScenesPanel />
 
       <section className="panel">
         <h2>Autopilot</h2>
@@ -239,88 +216,69 @@ export default function Control() {
   );
 }
 
-function LongPlayPanel() {
+function ScenesPanel() {
   const { client, config } = useGate();
   if (!config) return null;
 
-  const running = config.render.walk_enabled && config.render.walk_layers;
-  const active = running
-    ? LONG_PLAYS.find(
-        (play) =>
-          Math.abs(config.render.walk_speed - play.speed) < 0.01 &&
-          Math.abs(config.render.walk_depth - play.depth) < 0.01,
-      )
-    : null;
-  const enabledLayers = config.layers.filter((layer) => layer.enabled).length;
+  const signature = config.layers.map((item) => item.name).join("|");
+  const active = SCENE_PRESETS.find(
+    (scene) => scene.layers.map((item) => item.name).join("|") === signature,
+  );
 
-  const start = (play: (typeof LONG_PLAYS)[number]) => {
+  const load = (scene: ScenePreset) => {
     client.setConfig({
       ...config,
       render: {
         ...config.render,
         walk_enabled: true,
-        walk_layers: true,
-        // With only two eligible layers, allow one to fade out so there is still
-        // somewhere for the layer walk to go. Larger stacks keep two lit.
-        walk_min_layers: Math.min(enabledLayers <= 2 ? 1 : 2, Math.max(1, enabledLayers)),
-        walk_speed: play.speed,
-        walk_depth: play.depth,
+        walk_layers: false,
+        master_speed: scene.masterSpeed,
+        walk_speed: scene.walkSpeed,
+        walk_depth: scene.walkDepth,
       },
-    });
-  };
-
-  const stop = () => {
-    client.setConfig({
-      ...config,
-      render: { ...config.render, walk_enabled: false },
+      beat_taps: { ...config.beat_taps, enabled: false },
+      layers: scene.layers.map((item) => ({ ...item })),
     });
   };
 
   return (
-    <section className={`panel long-play ${running ? "running" : ""}`}>
-      <div className="long-play-head">
+    <section className="panel scene-library">
+      <div className="scene-library-head">
         <div>
-          <p className="eyebrow">Unattended mode</p>
-          <h2>Long play</h2>
+          <p className="eyebrow">Uprising studies</p>
+          <h2>Saved scenes</h2>
         </div>
-        <div className="long-play-orbit" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </div>
+        <span className="scene-count">{SCENE_PRESETS.length} starting points</span>
       </div>
-      <p className="long-play-lede">
-        Start a continuously evolving show, then close this screen. It runs on the Gate
-        itself and keeps going until you stop it.
+      <p className="scene-library-lede">
+        Authored compositions translated from saved Uprising pieces. Loading one replaces
+        the current layer stack; then every layer remains editable below. A restrained
+        drift keeps the composition moving without changing which layers play.
       </p>
-      <div className="long-play-grid">
-        {LONG_PLAYS.map((play) => {
-          const selected = active?.id === play.id;
+      <div className="scene-grid">
+        {SCENE_PRESETS.map((scene) => {
+          const selected = active?.id === scene.id;
           return (
-            <button
-              key={play.id}
-              className={`long-play-choice ${selected ? "active" : ""}`}
-              aria-pressed={selected}
-              onClick={() => start(play)}
-            >
-              <strong>{play.name}</strong>
-              <span>{play.description}</span>
-            </button>
+            <article key={scene.id} className={`scene-card ${selected ? "active" : ""}`}>
+              <div className="scene-palette" aria-label={`${scene.name} palette`}>
+                {scene.palette.map((color) => <i key={color} style={{ background: color }} />)}
+              </div>
+              <p className="scene-source">{scene.source}</p>
+              <h3>{scene.name}</h3>
+              <p>{scene.description}</p>
+              <div className="scene-card-foot">
+                <span>{scene.layers.length} layers</span>
+                <button
+                  className={selected ? "active" : ""}
+                  onClick={() => load(scene)}
+                >
+                  {selected ? "Reload scene" : "Load scene"}
+                </button>
+              </div>
+            </article>
           );
         })}
       </div>
-      <div className="long-play-foot">
-        <span className={`long-play-status ${running ? "on" : ""}`}>
-          <i />
-          {running ? `${active?.name ?? "Custom"} is playing` : "Long play is off"}
-        </span>
-        {running && <button onClick={stop}>Stop</button>}
-      </div>
-      {enabledLayers < 2 && (
-        <p className="hint long-play-note">
-          Fewer than two layers are enabled. Turn on more layers below for a richer rotation.
-        </p>
-      )}
     </section>
   );
 }
