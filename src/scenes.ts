@@ -28,6 +28,38 @@ function layer(
  */
 export const SCENE_PRESETS: ScenePreset[] = [
   {
+    id: "original-gate",
+    name: "Original Gate",
+    source: "Empyrean Gate · original default",
+    description: "The pre-Uprising house stack: nebula, harmonic rings, treble glitter, and beat rings.",
+    palette: ["#413f92", "#32d5d2", "#ffb5d7"],
+    masterSpeed: 1,
+    walkSpeed: 1,
+    walkDepth: 1,
+    layers: [
+      layer("noise_color", "Nebula base", {
+        blend: "alpha_over", opacity: 1, speed: 0.25, scale: 1.2,
+        audio_amount: 0.3, hue: 0.65, hue_range: 0.25, saturation: 0.9,
+        brightness: 0.5, walk_amount: 0.25,
+      }),
+      layer("radial_waves", "Harmonic rings", {
+        blend: "add", opacity: 0.6, speed: 1, scale: 1,
+        audio_amount: 0.8, hue: 0.55, hue_range: 0.1, saturation: 0.9,
+        brightness: 1, walk_amount: 0.25, param_a: 3, param_b: 4,
+      }),
+      layer("sparkle", "Treble glitter", {
+        blend: "add", opacity: 0.7, speed: 1, scale: 1,
+        audio_amount: 0.9, hue: 0.12, hue_range: 0.05, saturation: 0.3,
+        brightness: 1, walk_amount: 0.25, param_a: 0.15,
+      }),
+      layer("beat_rings", "Beat rings", {
+        blend: "add", opacity: 0.8, speed: 1, scale: 1,
+        audio_amount: 1, hue: 0.85, hue_range: 0, saturation: 0.9,
+        brightness: 1, walk_amount: 0.25, param_a: 0.08,
+      }),
+    ],
+  },
+  {
     id: "warm-windstorm",
     name: "Warm Windstorm",
     source: "Uprising · Warm Windstorm",
