@@ -6,7 +6,7 @@ import { EFFECTS } from "./effects";
 import { SCENE_PRESETS, type ScenePreset } from "./scenes";
 import Sparkbars from "./Sparkbars";
 import { useGate, useThrottled } from "./state";
-import { LAYER_LABELS } from "./types";
+import { LAYER_LABELS, type SavedStack } from "./types";
 
 function choose(n: number, k: number): number {
   if (k < 0 || k > n) return 0;
@@ -218,12 +218,70 @@ export default function Control() {
 
 function ScenesPanel() {
   const { client, config } = useGate();
+  const [capturing, setCapturing] = useState(false);
+  const [stackName, setStackName] = useState("");
   if (!config) return null;
 
-  const signature = config.layers.map((item) => item.name).join("|");
+  const savedStacks = config.saved_stacks ?? [];
+  const signature = JSON.stringify(config.layers);
   const active = SCENE_PRESETS.find(
-    (scene) => scene.layers.map((item) => item.name).join("|") === signature,
+    (scene) => JSON.stringify(scene.layers) === signature,
   );
+  const activeSaved = savedStacks.find((stack) => JSON.stringify(stack.layers) === signature);
+
+  const capture = (id: string, name: string): SavedStack => ({
+    id,
+    name,
+    layers: config.layers.map((item) => ({ ...item })),
+    master_speed: config.render.master_speed,
+    walk_enabled: config.render.walk_enabled,
+    walk_layers: config.render.walk_layers,
+    walk_min_layers: config.render.walk_min_layers,
+    walk_speed: config.render.walk_speed,
+    walk_depth: config.render.walk_depth,
+  });
+
+  const saveCurrent = () => {
+    const name = stackName.trim();
+    if (!name) return;
+    const id = `stack-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    client.setConfig({ ...config, saved_stacks: [...savedStacks, capture(id, name)] });
+    setStackName("");
+    setCapturing(false);
+  };
+
+  const loadSaved = (stack: SavedStack) => {
+    client.setConfig({
+      ...config,
+      render: {
+        ...config.render,
+        master_speed: stack.master_speed,
+        walk_enabled: stack.walk_enabled,
+        walk_layers: stack.walk_layers,
+        walk_min_layers: stack.walk_min_layers,
+        walk_speed: stack.walk_speed,
+        walk_depth: stack.walk_depth,
+      },
+      layers: stack.layers.map((item) => ({ ...item })),
+    });
+  };
+
+  const updateSaved = (stack: SavedStack) => {
+    client.setConfig({
+      ...config,
+      saved_stacks: savedStacks.map((item) =>
+        item.id === stack.id ? capture(stack.id, stack.name) : item,
+      ),
+    });
+  };
+
+  const deleteSaved = (stack: SavedStack) => {
+    if (!window.confirm(`Delete saved stack “${stack.name}”?`)) return;
+    client.setConfig({
+      ...config,
+      saved_stacks: savedStacks.filter((item) => item.id !== stack.id),
+    });
+  };
 
   const load = (scene: ScenePreset) => {
     client.setConfig({
@@ -248,13 +306,72 @@ function ScenesPanel() {
           <p className="eyebrow">Uprising studies</p>
           <h2>Saved scenes</h2>
         </div>
-        <span className="scene-count">{SCENE_PRESETS.length} starting points</span>
+        <button
+          className="primary"
+          onClick={() => {
+            const baseName = activeSaved?.name ?? active?.name;
+            setStackName(baseName ? `${baseName} study` : `Stack ${savedStacks.length + 1}`);
+            setCapturing(true);
+          }}
+        >
+          ＋ Save current stack
+        </button>
       </div>
       <p className="scene-library-lede">
         Authored compositions translated from saved Uprising pieces. Loading one replaces
         the current layer stack; then every layer remains editable below. A restrained
         drift keeps the composition moving without changing which layers play.
       </p>
+      {capturing && (
+        <div className="stack-capture">
+          <label>
+            <span>Name this stack</span>
+            <input
+              autoFocus
+              type="text"
+              maxLength={80}
+              value={stackName}
+              onChange={(e) => setStackName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveCurrent();
+                if (e.key === "Escape") setCapturing(false);
+              }}
+            />
+          </label>
+          <button className="primary" disabled={!stackName.trim()} onClick={saveCurrent}>Save</button>
+          <button onClick={() => setCapturing(false)}>Cancel</button>
+        </div>
+      )}
+      {savedStacks.length > 0 && (
+        <div className="saved-stack-section">
+          <div className="scene-section-title">
+            <h3>Your stacks</h3>
+            <span>{savedStacks.length} saved on Gate</span>
+          </div>
+          <div className="saved-stack-list">
+            {savedStacks.map((stack) => {
+              const selected = activeSaved?.id === stack.id;
+              return (
+                <article key={stack.id} className={`saved-stack-row ${selected ? "active" : ""}`}>
+                  <div>
+                    <strong>{stack.name}</strong>
+                    <span>{stack.layers.length} layers · {stack.master_speed.toFixed(2)}× speed</span>
+                  </div>
+                  <div className="saved-stack-actions">
+                    <button onClick={() => loadSaved(stack)}>{selected ? "Reload" : "Load"}</button>
+                    <button onClick={() => updateSaved(stack)}>Update</button>
+                    <button className="danger" onClick={() => deleteSaved(stack)} aria-label={`Delete ${stack.name}`}>×</button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      <div className="scene-section-title built-ins">
+        <h3>Starting points</h3>
+        <span>{SCENE_PRESETS.length} built in</span>
+      </div>
       <div className="scene-grid">
         {SCENE_PRESETS.map((scene) => {
           const selected = active?.id === scene.id;

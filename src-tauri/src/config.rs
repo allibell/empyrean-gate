@@ -357,6 +357,39 @@ pub struct WindowsConfig {
     pub aux_open: Vec<String>,
 }
 
+/// A named, reusable capture of the layer stack and the motion settings that
+/// shape it. Saved with the main config so every control device sees the same
+/// library and it survives backend restarts.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SavedStack {
+    pub id: String,
+    pub name: String,
+    pub layers: Vec<LayerCfg>,
+    pub master_speed: f32,
+    pub walk_enabled: bool,
+    pub walk_layers: bool,
+    pub walk_min_layers: u32,
+    pub walk_speed: f32,
+    pub walk_depth: f32,
+}
+
+impl Default for SavedStack {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: "Untitled stack".into(),
+            layers: Vec::new(),
+            master_speed: 1.0,
+            walk_enabled: false,
+            walk_layers: false,
+            walk_min_layers: 1,
+            walk_speed: 1.0,
+            walk_depth: 1.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppConfig {
@@ -369,6 +402,8 @@ pub struct AppConfig {
     pub windows: WindowsConfig,
     pub beat_taps: BeatTapConfig,
     pub layers: Vec<LayerCfg>,
+    /// Named layer-stack captures shared by all clients.
+    pub saved_stacks: Vec<SavedStack>,
     /// Known client devices (see `ClientRecord`).
     pub clients: Vec<ClientRecord>,
 }
@@ -385,6 +420,7 @@ impl Default for AppConfig {
             windows: WindowsConfig::default(),
             beat_taps: BeatTapConfig::default(),
             layers: default_layer_stack(),
+            saved_stacks: Vec::new(),
             clients: Vec::new(),
         }
     }

@@ -803,6 +803,109 @@ main {
   white-space: nowrap;
 }
 
+.stack-capture {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 12px;
+  border: 1px solid rgba(56, 209, 194, 0.35);
+  border-radius: 9px;
+  background: rgba(10, 8, 20, 0.65);
+}
+
+.stack-capture label {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.stack-capture label span,
+.scene-section-title span,
+.saved-stack-row span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.stack-capture input {
+  width: 100%;
+}
+
+.scene-section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 8px;
+}
+
+.scene-section-title.built-ins {
+  margin-top: 16px;
+}
+
+.scene-section-title h3 {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.saved-stack-section {
+  margin-bottom: 6px;
+}
+
+.saved-stack-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.saved-stack-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid #332a55;
+  border-radius: 8px;
+  background: rgba(10, 8, 20, 0.5);
+}
+
+.saved-stack-row.active {
+  border-color: var(--accent2);
+}
+
+.saved-stack-row > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.saved-stack-row strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-stack-actions {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.saved-stack-actions button {
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+.saved-stack-actions button.danger {
+  width: 29px;
+  padding: 5px;
+}
+
 .scene-library-lede {
   max-width: 610px;
   margin: 12px 0 16px;
@@ -884,6 +987,15 @@ main {
 }
 
 @media (max-width: 560px) {
+  .scene-library-head,
+  .stack-capture,
+  .saved-stack-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .saved-stack-actions button:not(.danger) {
+    flex: 1;
+  }
   .scene-grid {
     grid-template-columns: 1fr;
   }

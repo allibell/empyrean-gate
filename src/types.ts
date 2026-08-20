@@ -50,6 +50,18 @@ export interface LayerCfg {
   param_d: number;
 }
 
+export interface SavedStack {
+  id: string;
+  name: string;
+  layers: LayerCfg[];
+  master_speed: number;
+  walk_enabled: boolean;
+  walk_layers: boolean;
+  walk_min_layers: number;
+  walk_speed: number;
+  walk_depth: number;
+}
+
 export interface EffectCfg {
   kind: EffectKind;
   angle: number;
@@ -165,6 +177,7 @@ export interface AppConfig {
   windows: WindowsConfig;
   beat_taps: BeatTapConfig;
   layers: LayerCfg[];
+  saved_stacks: SavedStack[];
   clients: ClientRecord[];
 }
 
