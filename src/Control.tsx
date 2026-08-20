@@ -7,6 +7,30 @@ import Sparkbars from "./Sparkbars";
 import { useGate, useThrottled } from "./state";
 import { LAYER_LABELS } from "./types";
 
+const LONG_PLAYS = [
+  {
+    id: "drift",
+    name: "Drift",
+    description: "Quiet, spacious changes for an ambient room.",
+    speed: 0.5,
+    depth: 0.65,
+  },
+  {
+    id: "roam",
+    name: "Roam",
+    description: "A balanced all-night wander through the scene.",
+    speed: 1,
+    depth: 1.15,
+  },
+  {
+    id: "flux",
+    name: "Flux",
+    description: "Brighter, livelier movement with quicker changes.",
+    speed: 2,
+    depth: 1.65,
+  },
+] as const;
+
 function choose(n: number, k: number): number {
   if (k < 0 || k > n) return 0;
   let r = 1;
@@ -137,6 +161,8 @@ export default function Control() {
 
       <BeatTapsPanel />
 
+      <LongPlayPanel />
+
       <section className="panel">
         <h2>Autopilot</h2>
         <p className="hint">
@@ -159,7 +185,7 @@ export default function Control() {
             min={0.1}
             max={5}
             step={0.1}
-            defaultValue={config?.render.walk_speed ?? 1}
+            value={config?.render.walk_speed ?? 1}
             onChange={(e) => setRender({ walk_speed: Number(e.target.value) })}
           />
         </label>
@@ -170,7 +196,7 @@ export default function Control() {
             min={0}
             max={3}
             step={0.1}
-            defaultValue={config?.render.walk_depth ?? 1}
+            value={config?.render.walk_depth ?? 1}
             onChange={(e) => setRender({ walk_depth: Number(e.target.value) })}
           />
         </label>
@@ -210,6 +236,92 @@ export default function Control() {
         ))}
       </section>
     </div>
+  );
+}
+
+function LongPlayPanel() {
+  const { client, config } = useGate();
+  if (!config) return null;
+
+  const running = config.render.walk_enabled && config.render.walk_layers;
+  const active = running
+    ? LONG_PLAYS.find(
+        (play) =>
+          Math.abs(config.render.walk_speed - play.speed) < 0.01 &&
+          Math.abs(config.render.walk_depth - play.depth) < 0.01,
+      )
+    : null;
+  const enabledLayers = config.layers.filter((layer) => layer.enabled).length;
+
+  const start = (play: (typeof LONG_PLAYS)[number]) => {
+    client.setConfig({
+      ...config,
+      render: {
+        ...config.render,
+        walk_enabled: true,
+        walk_layers: true,
+        // With only two eligible layers, allow one to fade out so there is still
+        // somewhere for the layer walk to go. Larger stacks keep two lit.
+        walk_min_layers: Math.min(enabledLayers <= 2 ? 1 : 2, Math.max(1, enabledLayers)),
+        walk_speed: play.speed,
+        walk_depth: play.depth,
+      },
+    });
+  };
+
+  const stop = () => {
+    client.setConfig({
+      ...config,
+      render: { ...config.render, walk_enabled: false },
+    });
+  };
+
+  return (
+    <section className={`panel long-play ${running ? "running" : ""}`}>
+      <div className="long-play-head">
+        <div>
+          <p className="eyebrow">Unattended mode</p>
+          <h2>Long play</h2>
+        </div>
+        <div className="long-play-orbit" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+      </div>
+      <p className="long-play-lede">
+        Start a continuously evolving show, then close this screen. It runs on the Gate
+        itself and keeps going until you stop it.
+      </p>
+      <div className="long-play-grid">
+        {LONG_PLAYS.map((play) => {
+          const selected = active?.id === play.id;
+          return (
+            <button
+              key={play.id}
+              className={`long-play-choice ${selected ? "active" : ""}`}
+              aria-pressed={selected}
+              onClick={() => start(play)}
+            >
+              <strong>{play.name}</strong>
+              <span>{play.description}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="long-play-foot">
+        <span className={`long-play-status ${running ? "on" : ""}`}>
+          <i />
+          {running ? `${active?.name ?? "Custom"} is playing` : "Long play is off"}
+        </span>
+        {running && <button onClick={stop}>Stop</button>}
+      </div>
+      {enabledLayers < 2 && (
+        <p className="hint long-play-note">
+          Fewer than two layers are enabled. Turn on more layers below for a richer rotation.
+        </p>
+      )}
+    </section>
   );
 }
 
