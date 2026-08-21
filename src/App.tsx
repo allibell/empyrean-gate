@@ -8,7 +8,7 @@ import { useGate } from "./state";
 
 const TABS = [
   { id: "live", label: "Live" },
-  { id: "media", label: "Video" },
+  { id: "media", label: "Media" },
   { id: "control", label: "Control" },
   { id: "settings", label: "Settings" },
 ] as const;

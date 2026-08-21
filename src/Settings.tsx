@@ -378,7 +378,7 @@ function AudioPanel({ config }: { config: AppConfig }) {
       <p className="hint">
         Up to 4 analyzed in parallel — e.g. main stage feed + a local mic. Channels lets one
         multichannel interface feed several sources (blank = mix all). Remote sources take
-        features from a browser client's mic; Video soundtrack follows the current Video-tab source.
+        features from a browser client's mic; Video soundtrack follows the current Media-tab source.
       </p>
       {sources.map((s, i) => {
         const st = status?.audio[i];

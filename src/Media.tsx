@@ -533,12 +533,14 @@ export default function Media() {
         </form>
         <div className="media-or"><span>or</span></div>
         <div className="media-file-buttons">
-          <label className="media-file-button">
-            Choose an image
+          <label className="media-file-button media-file-button-primary">
+            <strong>Choose an image</strong>
+            <span>PNG, JPEG, WebP, GIF, or AVIF</span>
             <input type="file" accept="image/*" onChange={(e) => loadFile(e.target.files?.[0])} />
           </label>
           <label className="media-file-button">
-            Choose a video
+            <strong>Choose a video</strong>
+            <span>MP4, MOV, or WebM</span>
             <input type="file" accept="video/*" onChange={(e) => loadFile(e.target.files?.[0])} />
           </label>
         </div>
