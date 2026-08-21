@@ -21,9 +21,12 @@ export interface ControlWidget {
 export interface ControlDeck {
   id: string;
   name: string;
+  schemaVersion?: number;
   widgets: ControlWidget[];
   layouts: ResponsiveLayouts<DeckBreakpoint>;
 }
+
+const DECK_SCHEMA_VERSION = 3;
 
 export const DECK_BREAKPOINTS: Record<DeckBreakpoint, number> = {
   desktop: 1180,
@@ -82,6 +85,7 @@ export function defaultControlDeck(): ControlDeck {
   return {
     id: "default",
     name: "Live · Balanced",
+    schemaVersion: DECK_SCHEMA_VERSION,
     widgets: kinds.map((kind) => ({ id: kind, kind })),
     layouts: {
       phone: [
@@ -103,13 +107,13 @@ export function defaultControlDeck(): ControlDeck {
         item("master", 0, 11, 8, 2, 2, 2),
       ],
       desktop: [
-        item("tools", 0, 0, 2, 6, 2, 2),
+        item("tools", 0, 2, 2, 5, 2, 2),
+        item("effects", 0, 7, 2, 2, 2, 1),
         item("preview", 2, 0, 8, 12, 4, 6),
-        item("effects", 10, 0, 2, 3, 2, 1),
-        item("tempo", 10, 3, 2, 4, 2, 2),
-        item("master", 10, 7, 2, 3, 2, 2),
-        item("colors", 0, 6, 2, 3, 2, 1),
-        item("size", 10, 10, 2, 2, 2, 1),
+        item("colors", 10, 3, 2, 3, 2, 1),
+        item("size", 10, 6, 2, 1, 2, 1),
+        item("tempo", 10, 7, 2, 3, 2, 2),
+        item("master", 10, 10, 2, 2, 2, 2),
       ],
     },
   };
@@ -132,7 +136,16 @@ export function loadControlDecks(): ControlDeck[] {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as unknown;
     if (Array.isArray(parsed)) {
       const decks = parsed.filter(isDeck);
-      if (decks.length > 0) return decks;
+      if (decks.length > 0) {
+        const freshDefault = defaultControlDeck();
+        return decks.map((deck) => deck.id === "default" && deck.schemaVersion !== DECK_SCHEMA_VERSION
+          ? {
+              ...deck,
+              schemaVersion: DECK_SCHEMA_VERSION,
+              layouts: { ...deck.layouts, desktop: freshDefault.layouts.desktop },
+            }
+          : deck);
+      }
     }
   } catch {
     // A malformed local edit should never keep the performance surface from loading.

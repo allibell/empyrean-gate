@@ -69,13 +69,17 @@ export default function Live() {
     () => localStorage.getItem("empyrean-active-control-deck") ?? "default",
   );
   const [editing, setEditing] = useState(false);
-  const [breakpoint, setBreakpoint] = useState<DeckBreakpoint>("phone");
   const [addKind, setAddKind] = useState<ControlWidgetKind>("status");
   const [brightness, setBrightnessLocal] = useState(1);
   const [masterSpeed, setMasterSpeedLocal] = useState(1);
   const beatDotRef = useRef<HTMLDivElement>(null);
   const { width: deckWidth, containerRef: deckContainerRef, mounted: deckMounted } =
     useContainerWidth({ initialWidth: window.innerWidth });
+  const breakpoint: DeckBreakpoint = deckWidth >= DECK_BREAKPOINTS.desktop
+    ? "desktop"
+    : deckWidth >= DECK_BREAKPOINTS.tablet
+      ? "tablet"
+      : "phone";
   const setBrightness = useThrottled((value: number) =>
     client.setMaster({ brightness: value }),
   );
@@ -499,7 +503,6 @@ export default function Live() {
             compactor={verticalCompactor}
             dragConfig={{ enabled: editing, bounded: true, handle: ".deck-drag-handle", cancel: "button,input,select" }}
             resizeConfig={{ enabled: editing, handles: ["se", "sw"] }}
-            onBreakpointChange={(next) => setBreakpoint(next)}
             onLayoutChange={(_layout, layouts: ResponsiveLayouts<DeckBreakpoint>) => {
               if (!editing) return;
               updateActiveDeck((deck) =>

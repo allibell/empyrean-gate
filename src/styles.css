@@ -1720,11 +1720,13 @@ button:disabled {
 
 .control-deck-shell {
   width: 100%;
+  max-width: 1480px;
   min-height: 240px;
+  margin: 0 auto;
 }
 
 .control-deck-shell > .react-grid-layout {
-  min-height: calc(100dvh - 110px);
+  min-height: 0;
   transition: height 180ms ease;
 }
 
@@ -1979,10 +1981,36 @@ button:disabled {
   text-transform: uppercase;
 }
 
+@media (min-width: 1180px) {
+  .control-deck-page:not(.deck-editing) .control-widget {
+    overflow: visible;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .control-deck-page:not(.deck-editing) .control-widget-body {
+    padding: 0;
+    overflow: visible;
+  }
+
+  .control-deck-page:not(.deck-editing) .control-widget-preview .control-widget-body {
+    overflow: hidden;
+  }
+
+  .control-deck-page:not(.deck-editing) .control-widget-preview {
+    background: radial-gradient(circle at center, rgba(37, 26, 63, 0.16), transparent 68%);
+  }
+}
+
 @media (max-width: 700px) {
   .control-deck-page {
     display: block;
     padding: 0 0 calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .control-deck-shell {
+    max-width: none;
   }
 
   .control-deck-toolbar {

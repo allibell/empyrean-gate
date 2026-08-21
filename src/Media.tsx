@@ -34,6 +34,16 @@ const IMAGE_MOTIONS: ReadonlyArray<{ value: ImageMotion; label: string }> = [
 
 const BUNDLED_IMAGES = [
   {
+    playbackUrl: "/media/entheos.png",
+    title: "Entheos",
+    label: "Entheos",
+    description: "Original camp artwork",
+    motion: "ambient" as ImageMotion,
+    intensity: 0.55,
+    seconds: 60,
+    fit: "contain" as ImageFit,
+  },
+  {
     playbackUrl: "/media/axis-mundi-gate-scene.png",
     title: "Axis Mundi · Full Gate scene",
     label: "Axis Mundi scene",
@@ -357,7 +367,7 @@ export default function Media() {
       resolvedBy: "Gate artwork",
       kind: "image",
     });
-    setFadeWhite(false);
+    setFadeWhite(image.playbackUrl === "/media/entheos.png");
     setImageMotion(image.motion);
     setImageMotionAmount(image.intensity);
     setImageCycleSeconds(image.seconds);
@@ -640,9 +650,11 @@ export default function Media() {
                 onLoad={(event) => {
                   setError(null);
                   setFadeWhite(
-                    media.resolvedBy === "Gate artwork"
-                      ? false
-                      : !imageHasTransparency(event.currentTarget),
+                    media.playbackUrl === "/media/entheos.png"
+                      ? true
+                      : media.resolvedBy === "Gate artwork"
+                        ? false
+                        : !imageHasTransparency(event.currentTarget),
                   );
                 }}
                 onError={() => setError("This browser could not decode that image. Try PNG, JPEG, or WebP.")}
