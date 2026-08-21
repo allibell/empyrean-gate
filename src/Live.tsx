@@ -21,11 +21,13 @@ import {
   WIDGET_CATALOG,
   widgetLabel,
   type ControlDeck,
+  type ControlWidget,
   type ControlWidgetKind,
   type DeckBreakpoint,
 } from "./controlDecks";
 import { EFFECTS } from "./effects";
 import GateCanvas from "./GateCanvas";
+import { QuickSettingsEditor, QuickSettingsPanel } from "./DeckQuickSettings";
 import Sparkbars from "./Sparkbars";
 import { useGate, useThrottled } from "./state";
 import ToolIcon, { type ToolKind } from "./ToolIcon";
@@ -72,6 +74,7 @@ export default function Live() {
   const [addKind, setAddKind] = useState<ControlWidgetKind>("status");
   const [brightness, setBrightnessLocal] = useState(1);
   const [masterSpeed, setMasterSpeedLocal] = useState(1);
+  const [shortcutEditorId, setShortcutEditorId] = useState<string | null>(null);
   const beatDotRef = useRef<HTMLDivElement>(null);
   const { width: deckWidth, containerRef: deckContainerRef, mounted: deckMounted } =
     useContainerWidth({ initialWidth: window.innerWidth });
@@ -389,8 +392,8 @@ export default function Live() {
     </div>
   );
 
-  const widgetContent = (kind: ControlWidgetKind) => {
-    switch (kind) {
+  const widgetContent = (widget: ControlWidget) => {
+    switch (widget.kind) {
       case "preview": return preview;
       case "tools": return pens;
       case "effects": return effects;
@@ -398,6 +401,12 @@ export default function Live() {
       case "colors": return colors;
       case "size": return sizeCtl;
       case "master": return master;
+      case "quick_settings": return (
+        <QuickSettingsPanel
+          shortcuts={widget.shortcuts ?? []}
+          onEdit={(id) => setShortcutEditorId(id)}
+        />
+      );
       case "layers": return layers;
       case "status": return showStatus;
     }
@@ -518,6 +527,14 @@ export default function Live() {
                   <div className="deck-drag-handle">
                     <span aria-hidden="true">⠿</span>
                     <strong>{widgetLabel(widget.kind)}</strong>
+                    {widget.kind === "quick_settings" && (
+                      <button
+                        aria-label="Customize quick settings"
+                        onClick={() => setShortcutEditorId("")}
+                      >
+                        ⚙
+                      </button>
+                    )}
                     <button
                       aria-label={`Remove ${widgetLabel(widget.kind)}`}
                       onClick={() => updateActiveDeck((deck) => removeWidgetFromDeck(deck, widget.id))}
@@ -526,12 +543,29 @@ export default function Live() {
                     </button>
                   </div>
                 )}
-                <div className="control-widget-body">{widgetContent(widget.kind)}</div>
+                <div className="control-widget-body">{widgetContent(widget)}</div>
               </section>
             ))}
           </Responsive>
         )}
       </div>
+      {shortcutEditorId !== null && (() => {
+        const widget = activeDeck.widgets.find((entry) => entry.kind === "quick_settings");
+        if (!widget) return null;
+        return (
+          <QuickSettingsEditor
+            shortcuts={widget.shortcuts ?? []}
+            initialId={shortcutEditorId}
+            onClose={() => setShortcutEditorId(null)}
+            onChange={(shortcuts) => updateActiveDeck((deck) => ({
+              ...deck,
+              widgets: deck.widgets.map((entry) => entry.id === widget.id
+                ? { ...entry, shortcuts }
+                : entry),
+            }))}
+          />
+        );
+      })()}
     </div>
   );
 }

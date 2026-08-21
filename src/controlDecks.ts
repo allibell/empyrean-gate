@@ -1,4 +1,5 @@
 import type { LayoutItem, ResponsiveLayouts } from "react-grid-layout";
+import { defaultQuickSettings, type QuickSettingShortcut } from "./quickSettings";
 
 export type DeckBreakpoint = "phone" | "tablet" | "desktop";
 
@@ -10,12 +11,14 @@ export type ControlWidgetKind =
   | "colors"
   | "size"
   | "master"
+  | "quick_settings"
   | "layers"
   | "status";
 
 export interface ControlWidget {
   id: string;
   kind: ControlWidgetKind;
+  shortcuts?: QuickSettingShortcut[];
 }
 
 export interface ControlDeck {
@@ -26,7 +29,7 @@ export interface ControlDeck {
   layouts: ResponsiveLayouts<DeckBreakpoint>;
 }
 
-const DECK_SCHEMA_VERSION = 3;
+const DECK_SCHEMA_VERSION = 4;
 
 export const DECK_BREAKPOINTS: Record<DeckBreakpoint, number> = {
   desktop: 1180,
@@ -52,6 +55,7 @@ export const WIDGET_CATALOG: ReadonlyArray<{
   { kind: "colors", label: "Colors", description: "Drawing and effect color palette" },
   { kind: "size", label: "Brush size", description: "Drawing and effect size" },
   { kind: "master", label: "Master", description: "Brightness and global speed" },
+  { kind: "quick_settings", label: "Quick settings", description: "Custom set, hold, and timed setting buttons" },
   { kind: "layers", label: "Layers", description: "Quick layer enable controls" },
   { kind: "status", label: "Show status", description: "Beat, FPS, output, and connection health" },
 ];
@@ -81,12 +85,15 @@ export function defaultControlDeck(): ControlDeck {
     "colors",
     "size",
     "master",
+    "quick_settings",
   ];
   return {
     id: "default",
     name: "Live · Balanced",
     schemaVersion: DECK_SCHEMA_VERSION,
-    widgets: kinds.map((kind) => ({ id: kind, kind })),
+    widgets: kinds.map((kind) => kind === "quick_settings"
+      ? { id: kind, kind, shortcuts: defaultQuickSettings() }
+      : { id: kind, kind }),
     layouts: {
       phone: [
         item("preview", 0, 0, 4, 7, 2, 4),
@@ -96,6 +103,7 @@ export function defaultControlDeck(): ControlDeck {
         item("colors", 0, 15, 4, 1, 2, 1),
         item("size", 0, 16, 4, 1, 2, 1),
         item("master", 0, 17, 4, 2, 2, 2),
+        item("quick_settings", 0, 19, 4, 2, 2, 2),
       ],
       tablet: [
         item("preview", 0, 0, 6, 10, 3, 5),
@@ -105,6 +113,7 @@ export function defaultControlDeck(): ControlDeck {
         item("colors", 0, 10, 6, 1, 3, 1),
         item("size", 6, 10, 2, 1, 2, 1),
         item("master", 0, 11, 8, 2, 2, 2),
+        item("quick_settings", 0, 13, 8, 2, 2, 2),
       ],
       desktop: [
         item("tools", 0, 2, 2, 5, 2, 2),
@@ -114,6 +123,7 @@ export function defaultControlDeck(): ControlDeck {
         item("size", 10, 6, 2, 1, 2, 1),
         item("tempo", 10, 7, 2, 3, 2, 2),
         item("master", 10, 10, 2, 2, 2, 2),
+        item("quick_settings", 0, 0, 2, 2, 2, 2),
       ],
     },
   };
@@ -138,13 +148,17 @@ export function loadControlDecks(): ControlDeck[] {
       const decks = parsed.filter(isDeck);
       if (decks.length > 0) {
         const freshDefault = defaultControlDeck();
-        return decks.map((deck) => deck.id === "default" && deck.schemaVersion !== DECK_SCHEMA_VERSION
-          ? {
-              ...deck,
-              schemaVersion: DECK_SCHEMA_VERSION,
-              layouts: { ...deck.layouts, desktop: freshDefault.layouts.desktop },
-            }
-          : deck);
+        return decks.map((deck) => {
+          if (deck.id !== "default" || deck.schemaVersion === DECK_SCHEMA_VERSION) return deck;
+          const upgraded = {
+            ...deck,
+            schemaVersion: DECK_SCHEMA_VERSION,
+            layouts: { ...deck.layouts, desktop: freshDefault.layouts.desktop },
+          };
+          return upgraded.widgets.some((widget) => widget.kind === "quick_settings")
+            ? upgraded
+            : addWidgetToDeck(upgraded, "quick_settings");
+        });
       }
     }
   } catch {
@@ -174,6 +188,7 @@ const DEFAULT_SIZE: Record<ControlWidgetKind, Record<DeckBreakpoint, [number, nu
   colors: { phone: [4, 1], tablet: [4, 2], desktop: [3, 3] },
   size: { phone: [4, 1], tablet: [4, 1], desktop: [3, 2] },
   master: { phone: [4, 2], tablet: [4, 2], desktop: [3, 3] },
+  quick_settings: { phone: [4, 2], tablet: [4, 2], desktop: [3, 3] },
   layers: { phone: [4, 3], tablet: [4, 3], desktop: [3, 4] },
   status: { phone: [4, 2], tablet: [4, 2], desktop: [3, 3] },
 };
@@ -186,9 +201,12 @@ export function addWidgetToDeck(deck: ControlDeck, kind: ControlWidgetKind): Con
   if (deck.widgets.some((widget) => widget.kind === kind)) return deck;
   const id = kind;
   const next = structuredClone(deck);
-  next.widgets.push({ id, kind });
+  next.widgets.push(kind === "quick_settings"
+    ? { id, kind, shortcuts: defaultQuickSettings() }
+    : { id, kind });
   for (const breakpoint of Object.keys(DECK_COLUMNS) as DeckBreakpoint[]) {
     const layout = [...(next.layouts[breakpoint] ?? [])];
+    if (layout.some((entry) => entry.i === id)) continue;
     const [defaultW, defaultH] = DEFAULT_SIZE[kind][breakpoint];
     const w = Math.min(defaultW, DECK_COLUMNS[breakpoint]);
     layout.push(item(id as ControlWidgetKind, 0, bottom(layout), w, defaultH));
