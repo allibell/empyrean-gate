@@ -210,6 +210,54 @@ pub struct AudioConfig {
     pub sources: Vec<AudioSourceConfig>,
 }
 
+/// Where the musical clock used by beat-synchronized visuals comes from. Audio
+/// energy remains per-layer regardless of this choice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RhythmSource {
+    /// Preserve the original behavior: each layer follows the beat detector for
+    /// the same audio source it uses for level/bands/spectrum.
+    #[default]
+    LayerAudio,
+    /// One MIDI Timing Clock drives every layer; audio remains independently
+    /// selectable per layer. Intended for DJ mixers, bridges, and controllers.
+    MidiClock,
+    /// Passively receive beat/status packets from a Pioneer/AlphaTheta PRO DJ
+    /// LINK network. This app never announces a virtual deck or sends commands.
+    ProDjLink,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RhythmConfig {
+    pub source: RhythmSource,
+    /// Exact operating-system MIDI input port name. None means no port selected;
+    /// it never silently substitutes another device after a disconnect.
+    pub midi_port: Option<String>,
+    /// 0 follows the reported tempo master. 1..6 pins one player number, useful
+    /// with hardware that broadcasts beat packets but not full status to listeners.
+    pub pro_dj_link_player: u8,
+    /// Shift the lighting clock relative to the external input to compensate for LED/audio
+    /// transport latency. Positive values make the visual beat happen later.
+    pub latency_ms: f32,
+    /// If the external clock stops arriving, keep the show moving from this audio detector.
+    pub fallback_to_audio: bool,
+    pub fallback_audio_source: u32,
+}
+
+impl Default for RhythmConfig {
+    fn default() -> Self {
+        Self {
+            source: RhythmSource::LayerAudio,
+            midi_port: None,
+            pro_dj_link_player: 0,
+            latency_ms: 0.0,
+            fallback_to_audio: true,
+            fallback_audio_source: 0,
+        }
+    }
+}
+
 impl Default for AudioConfig {
     fn default() -> Self {
         Self {
@@ -397,6 +445,7 @@ pub struct AppConfig {
     pub output: OutputConfig,
     pub server: ServerConfig,
     pub audio: AudioConfig,
+    pub rhythm: RhythmConfig,
     pub render: RenderConfig,
     pub update: UpdateConfig,
     pub windows: WindowsConfig,
@@ -415,6 +464,7 @@ impl Default for AppConfig {
             output: OutputConfig::default(),
             server: ServerConfig::default(),
             audio: AudioConfig::default(),
+            rhythm: RhythmConfig::default(),
             render: RenderConfig::default(),
             update: UpdateConfig::default(),
             windows: WindowsConfig::default(),
@@ -528,6 +578,14 @@ pub fn load() -> AppConfig {
     if dirty {
         save(&cfg);
     }
+    // Isolated integration tests and parallel local instances can choose a port
+    // without rewriting the persisted operator configuration.
+    if let Some(port) = std::env::var("EMPYREAN_PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+    {
+        cfg.server.port = port;
+    }
     cfg
 }
 
@@ -543,5 +601,19 @@ pub fn save(cfg: &AppConfig) {
             }
         }
         Err(e) => log::error!("failed to serialize config: {e}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_without_rhythm_section_keeps_legacy_behavior() {
+        let mut value = serde_json::to_value(AppConfig::default()).unwrap();
+        value.as_object_mut().unwrap().remove("rhythm");
+        let config: AppConfig = serde_json::from_value(value).unwrap();
+        assert_eq!(config.rhythm.source, RhythmSource::LayerAudio);
+        assert!(config.rhythm.fallback_to_audio);
     }
 }

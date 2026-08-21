@@ -258,6 +258,26 @@ pub struct AudioSourceStatus {
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
+pub struct RhythmStatus {
+    /// True when the configured clock is driving the lights. For MIDI this means
+    /// recent clock pulses, a valid tempo, and no explicit transport Stop.
+    pub active: bool,
+    pub using_fallback: bool,
+    pub source: String,
+    pub detail: String,
+    pub bpm: f32,
+    pub beat_phase: f32,
+    pub running: bool,
+    pub age_ms: f32,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ProDjLinkDeviceInfo {
+    pub number: u8,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct VideoSourceStatus {
     pub active: bool,
     pub owner_id: String,
@@ -288,6 +308,10 @@ pub struct RuntimeStatus {
     pub pps_history: Vec<u32>,
     pub clients: u32,
     pub audio: Vec<AudioSourceStatus>,
+    pub rhythm: RhythmStatus,
+    /// Hot-plug refreshed MIDI input names.
+    pub midi_ports: Vec<String>,
+    pub pro_dj_link_devices: Vec<ProDjLinkDeviceInfo>,
     /// Available local capture devices, for the settings UI dropdowns.
     pub input_devices: Vec<DeviceInfo>,
     /// Output devices (selectable as loopback beat sources).

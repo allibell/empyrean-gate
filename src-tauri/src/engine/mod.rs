@@ -702,7 +702,7 @@ fn run_frames(state: &Arc<SharedState>, engine: &mut Engine) {
     let mut manual_beat_count = 0u64;
     let mut prev_beat_phase = [0.0f32; MAX_AUDIO_SOURCES];
     let mut last_beat_time = None;
-    let mut was_manual = false;
+    let mut last_timing_signature: Option<(u8, u32)> = None;
     let mut tap_angle: f32 = 0.0;
     let mut tap_beat_count: u64 = 0;
     let mut tap_spin_walk = LayerWalk::default();
@@ -763,23 +763,65 @@ fn run_frames(state: &Arc<SharedState>, engine: &mut Engine) {
         last_frame = now;
 
         if let Some(bpm) = cfg.render.manual_bpm {
-            let next = manual_beat_phase + dt * bpm.clamp(20.0, 400.0) / 60.0;
+            let next = manual_beat_phase + dt * bpm.clamp(10.0, 400.0) / 60.0;
             manual_beat_count = manual_beat_count.wrapping_add(next.floor() as u64);
             manual_beat_phase = next.fract();
         }
 
-        // Gather inputs.
-        let mut audio = [AudioUniform::default(); MAX_AUDIO_SOURCES];
-        for (i, slot) in state.audio.iter().enumerate() {
-            let a = slot.lock();
+        // Gather audio energy first. Timing is selected separately below so an
+        // authoritative external clock can drive every layer without replacing
+        // any layer's level/bands/waveform source.
+        let audio_inputs: [crate::state::AudioFeatures; MAX_AUDIO_SOURCES] =
+            std::array::from_fn(|i| *state.audio[i].lock());
+        for (i, a) in audio_inputs.iter().enumerate() {
             if a.bpm <= 0.0 {
                 raw_beat_count[i] = 0;
             } else if a.beat_phase < prev_raw_beat_phase[i] - 0.5 {
                 raw_beat_count[i] = raw_beat_count[i].wrapping_add(1);
             }
             prev_raw_beat_phase[i] = a.beat_phase;
+        }
+        let clock_now = Instant::now();
+        let clock_latency = cfg.rhythm.latency_ms.clamp(-500.0, 500.0);
+        let midi_clock = state.midi_clock.lock().snapshot(clock_now, clock_latency);
+        let (pioneer_clock, pioneer_label, pioneer_error, pioneer_devices) = {
+            let link = state.pioneer_clock.lock();
+            (
+                link.snapshot(clock_now, clock_latency),
+                link.player_label(),
+                link.listen_error().to_owned(),
+                link.devices(clock_now),
+            )
+        };
+        let midi_selected = cfg.rhythm.source == crate::config::RhythmSource::MidiClock;
+        let pioneer_selected = cfg.rhythm.source == crate::config::RhythmSource::ProDjLink;
+        let external_selected = midi_selected || pioneer_selected;
+        let external_clock = if pioneer_selected {
+            pioneer_clock
+        } else {
+            midi_clock
+        };
+        let fallback_index =
+            (cfg.rhythm.fallback_audio_source as usize).min(MAX_AUDIO_SOURCES.saturating_sub(1));
+
+        let mut audio = [AudioUniform::default(); MAX_AUDIO_SOURCES];
+        for (i, a) in audio_inputs.iter().enumerate() {
             let (base_phase, base_count, base_bpm) = match cfg.render.manual_bpm {
-                Some(bpm) => (manual_beat_phase, manual_beat_count, bpm.clamp(20.0, 400.0)),
+                Some(bpm) => (manual_beat_phase, manual_beat_count, bpm.clamp(10.0, 400.0)),
+                None if external_selected && external_clock.usable => (
+                    external_clock.beat_phase,
+                    external_clock.beat_count,
+                    external_clock.bpm,
+                ),
+                None if external_selected && cfg.rhythm.fallback_to_audio => {
+                    let fallback = &audio_inputs[fallback_index];
+                    (
+                        fallback.beat_phase,
+                        raw_beat_count[fallback_index],
+                        fallback.bpm,
+                    )
+                }
+                None if external_selected => (0.0, 0, 0.0),
                 None => (a.beat_phase, raw_beat_count[i], a.bpm),
             };
             audio[i] = AudioUniform {
@@ -812,11 +854,21 @@ fn run_frames(state: &Arc<SharedState>, engine: &mut Engine) {
         // Beat taps: on each detected beat (phase wrap) of the chosen source, fire
         // a burst at a point orbiting the ring — the automated spiral-tap.
         let bt = &cfg.beat_taps;
-        let is_manual = cfg.render.manual_bpm.is_some();
-        let beat_time_changed =
-            last_beat_time != Some(cfg.render.beat_time) || is_manual != was_manual;
+        let timing_signature = if cfg.render.manual_bpm.is_some() {
+            (1, 0)
+        } else if external_selected && external_clock.usable {
+            (2, 0)
+        } else if external_selected && cfg.rhythm.fallback_to_audio {
+            (3, fallback_index as u32)
+        } else if external_selected {
+            (4, 0)
+        } else {
+            (0, 0)
+        };
+        let beat_time_changed = last_beat_time != Some(cfg.render.beat_time)
+            || last_timing_signature != Some(timing_signature);
         last_beat_time = Some(cfg.render.beat_time);
-        was_manual = is_manual;
+        last_timing_signature = Some(timing_signature);
         for (i, a) in audio.iter().enumerate() {
             let wrapped = !beat_time_changed && a.beat_phase < prev_beat_phase[i] - 0.5;
             prev_beat_phase[i] = a.beat_phase;
@@ -1116,6 +1168,13 @@ fn run_frames(state: &Arc<SharedState>, engine: &mut Engine) {
                 st.pps_history = pps_hist.iter().copied().collect();
                 st.master_brightness = cfg.render.master_brightness;
                 st.master_speed = cfg.render.master_speed;
+                st.pro_dj_link_devices = pioneer_devices
+                    .iter()
+                    .map(|device| crate::protocol::ProDjLinkDeviceInfo {
+                        number: device.number,
+                        name: device.name.clone(),
+                    })
+                    .collect();
                 st.video = {
                     let v = state.video.lock();
                     let owner_name = cfg
@@ -1147,6 +1206,111 @@ fn run_frames(state: &Arc<SharedState>, engine: &mut Engine) {
                             revoked: c.revoked,
                         })
                         .collect()
+                };
+                st.rhythm = if let Some(bpm) = cfg.render.manual_bpm {
+                    crate::protocol::RhythmStatus {
+                        active: true,
+                        source: "manual".into(),
+                        detail: "manual override".into(),
+                        bpm: bpm * cfg.render.beat_time.multiplier(),
+                        beat_phase: audio[0].beat_phase,
+                        running: true,
+                        ..Default::default()
+                    }
+                } else if external_selected && external_clock.usable {
+                    crate::protocol::RhythmStatus {
+                        active: true,
+                        source: if pioneer_selected {
+                            "pro_dj_link".into()
+                        } else {
+                            "midi_clock".into()
+                        },
+                        detail: if pioneer_selected {
+                            pioneer_label.clone()
+                        } else {
+                            cfg.rhythm.midi_port.clone().unwrap_or_default()
+                        },
+                        bpm: external_clock.bpm * cfg.render.beat_time.multiplier(),
+                        beat_phase: audio[0].beat_phase,
+                        running: external_clock.running,
+                        age_ms: external_clock.age_ms,
+                        ..Default::default()
+                    }
+                } else if external_selected && cfg.rhythm.fallback_to_audio {
+                    let fallback = &audio_inputs[fallback_index];
+                    let id = cfg
+                        .audio
+                        .sources
+                        .get(fallback_index)
+                        .map(|s| s.id.as_str())
+                        .unwrap_or("missing");
+                    crate::protocol::RhythmStatus {
+                        active: fallback.active && fallback.bpm > 0.0,
+                        using_fallback: true,
+                        source: "audio".into(),
+                        detail: format!(
+                            "{} unavailable; following {id}",
+                            if pioneer_selected {
+                                "PRO DJ LINK"
+                            } else {
+                                "MIDI"
+                            }
+                        ),
+                        bpm: audio[0].bpm,
+                        beat_phase: audio[0].beat_phase,
+                        running: fallback.active,
+                        age_ms: external_clock.age_ms,
+                    }
+                } else if external_selected {
+                    let detail = if pioneer_selected && !pioneer_error.is_empty() {
+                        pioneer_error.clone()
+                    } else if pioneer_selected {
+                        "waiting for PRO DJ LINK beat packets".into()
+                    } else if cfg.rhythm.midi_port.is_none() {
+                        "select a MIDI input".into()
+                    } else if !external_clock.running && external_clock.bpm > 0.0 {
+                        "MIDI transport stopped".into()
+                    } else if external_clock.bpm > 0.0 {
+                        "MIDI clock timed out".into()
+                    } else {
+                        format!(
+                            "waiting for {}",
+                            cfg.rhythm.midi_port.as_deref().unwrap_or("MIDI clock")
+                        )
+                    };
+                    crate::protocol::RhythmStatus {
+                        source: if pioneer_selected {
+                            "pro_dj_link".into()
+                        } else {
+                            "midi_clock".into()
+                        },
+                        detail,
+                        running: external_clock.running,
+                        age_ms: external_clock.age_ms,
+                        ..Default::default()
+                    }
+                } else {
+                    let display = audio_inputs
+                        .iter()
+                        .enumerate()
+                        .find(|(i, a)| *i < cfg.audio.sources.len() && a.active && a.bpm > 0.0)
+                        .map(|(i, _)| i)
+                        .unwrap_or(0);
+                    let id = cfg
+                        .audio
+                        .sources
+                        .get(display)
+                        .map(|s| s.id.as_str())
+                        .unwrap_or("none");
+                    crate::protocol::RhythmStatus {
+                        active: audio_inputs[display].active && audio[display].bpm > 0.0,
+                        source: "layer_audio".into(),
+                        detail: format!("per-layer audio; showing {id}"),
+                        bpm: audio[display].bpm,
+                        beat_phase: audio[display].beat_phase,
+                        running: audio_inputs[display].active,
+                        ..Default::default()
+                    }
                 };
                 st.audio = state
                     .audio

@@ -352,6 +352,42 @@ audit found the identity/lifecycle half of E1.31 was unimplemented.
 - Media follow-ups: resilient provider-specific extraction and authenticated/DRM
   sources only if a deployment actually requires them.
 
+## Round 11: external rhythm sources
+
+- [x] Split lighting timing from per-layer audio energy without changing the default
+      behavior: Layer Audio still gives every layer the beat belonging to its own
+      level/bands/waveform/spectrum source.
+- [x] Add a global MIDI Timing Clock adapter (24 PPQN) with tempo/phase extrapolation,
+      Start/Continue/Stop, Song Position, exact-port hot-plug recovery, ±250 ms visual
+      latency calibration, live health, and optional fallback to a chosen audio source.
+- [x] Manual BPM remains the explicit highest-priority override; half/normal/double
+      time and beat taps operate on the selected effective lighting clock.
+- [x] Add receive-only native PRO DJ LINK beat/status input. It listens on the
+      standard UDP 50001/50002 ports, follows tempo-master status or a pinned player,
+      handles master handoff, and deliberately never claims a virtual deck identity
+      or emits a control packet onto the DJ network.
+- [x] Add a real published Boiler Room track-list excerpt plus synthetic deck/BPM/
+      cue annotations and a UDP+WebSocket E2E replay (`scripts/pioneer-link-test.ts`).
+      No copyrighted audio is stored. Source facts are explicitly distinguished
+      from test-only annotations in the fixture.
+- [ ] Validate against the actual production deck/mixer models before enabling at a
+      show. Add rekordbox track/cue/phrase metadata only after the beat/master path is
+      proven on that hardware; official Bridge/TCNet remains an alternate adapter.
+
+### Production performance baseline
+
+- The production show machine is an older Mac mini than the development Mac; exact
+  model/specs are not yet recorded. Treat its release-build benchmark as the real
+  performance baseline before increasing layer/pixel load or doing speculative
+  optimization.
+- On that Mac mini, run
+  `cargo run --release --bin engine-smoke -- --suite --warmup 120 --frames 600 --json`
+  with the real geometry. Keep the report with the machine model, macOS version, GPU,
+  and release version. The existing Intel-iGPU 1.74 ms development result is useful
+  headroom evidence, not a production guarantee.
+- Continue prioritizing deadline misses/p95-p99 frame time over mean frame time. The
+  next known scaling optimization remains batched UDP I/O at 100k+ pixels.
+
 ## Findings / gotchas
 
 - **wgpu 30 crashes (STATUS_ACCESS_VIOLATION) inside `vkCreateDevice` on this dev

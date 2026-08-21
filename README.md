@@ -71,6 +71,17 @@ live meters.
   unattended show evolves for hours without repeating.
 - **Audio loopback**: pick a system *output* device as a source (WASAPI loopback) —
   music played on the show machine drives the beat with no cabling.
+- **External lighting clock**: timing and audio energy are separate. By default each
+  layer follows its selected audio detector, preserving the original behavior. A
+  MIDI Timing Clock input can instead lock every layer to one DJ/mixer/bridge clock
+  while level, bands, waveform, and spectrum still come from each layer's selected
+  audio source. MIDI Start/Continue/Stop and Song Position are understood; input
+  hot-plug, a ±250 ms visual latency offset, and an optional audio fallback are
+  built in. The selected port is exact and is never silently substituted. Pioneer/
+  AlphaTheta decks can also drive the clock directly over PRO DJ LINK: Gate is a
+  passive UDP listener (never a virtual deck and never a sync-command sender),
+  follows the reported tempo master or an explicitly selected player, and retains
+  audio fallback through a deck/network outage.
 - **Audio hardware can come and go.** A missing or unplugged device never crashes or
   degrades the show: the source goes quiet (visuals decay calmly), reports "waiting
   for device", and is retried every 2 s until *that* device returns — a selected
@@ -108,6 +119,7 @@ src/                React UI (preview + settings), WebGL2 preview, sensors
 src-tauri/src/
   engine/           wgpu Vulkan engine + WGSL layer shader (hot-reloads in dev)
   audio/            cpal capture (per-source channel select) + FFT features + beat tracker
+  rhythm.rs         external musical clocks (MIDI Clock first; deck/link adapters next)
   sacn.rs           allocation-free E1.31 sender (prebuilt per-universe packets)
   server.rs         axum HTTP + WS (serves UI, speaks the protocol)
   media.rs          guarded URL resolver + ranged same-origin media proxy
@@ -201,3 +213,5 @@ updater and need one manual swap.)
 - Bundled extraction for changing provider sites; optional `yt-dlp` is best-effort,
   and DRM/login-gated video is intentionally out of scope.
 - Batched UDP I/O (`sendmmsg`/RIO) for 100k+ pixel scales.
+- PRO DJ LINK/TCNet track, cue, and phrase metadata. Direct beat/master timing is
+  implemented; richer metadata follows validation with the production deck model.

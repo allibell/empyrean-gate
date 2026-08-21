@@ -1,0 +1,58 @@
+{
+  "schema": "empyrean-gate.pro-dj-link-replay.v1",
+  "title": "Derek Plaslaiko 12hr Boiler Room — opening excerpt",
+  "source": "https://legacy.boilerroom.tv/derek-plaslaiko/",
+  "source_note": "Artist/title/order and source_timestamp come from Boiler Room's published full tracklist. simulated_bpm, deck, energy, transition, and cues are Empyrean Gate test annotations, not claims about the original performance.",
+  "tracks": [
+    {
+      "source_timestamp": "00:00:00",
+      "artist": "Aphex Twin",
+      "title": "Cliffs",
+      "simulated_bpm": 100,
+      "deck": 1,
+      "energy": 0.18,
+      "transition": "cold_open",
+      "cues": ["ambient_open", "low_motion"]
+    },
+    {
+      "source_timestamp": "00:05:56",
+      "artist": "Stevie Wonder",
+      "title": "Love's In Need Of Love Today",
+      "simulated_bpm": 102,
+      "deck": 2,
+      "energy": 0.32,
+      "transition": "long_blend",
+      "cues": ["warm_palette", "first_downbeat"]
+    },
+    {
+      "source_timestamp": "00:11:30",
+      "artist": "D'Angelo",
+      "title": "Playa Playa",
+      "simulated_bpm": 96,
+      "deck": 1,
+      "energy": 0.44,
+      "transition": "tempo_bend",
+      "cues": ["bass_focus", "half_time_candidate"]
+    },
+    {
+      "source_timestamp": "00:17:59",
+      "artist": "Innerzone Orchestra",
+      "title": "Bug In The Bassbin (Jazz Mix)",
+      "simulated_bpm": 122,
+      "deck": 2,
+      "energy": 0.68,
+      "transition": "master_handoff",
+      "cues": ["breakbeat", "increase_walk_depth"]
+    },
+    {
+      "source_timestamp": "00:29:47",
+      "artist": "The Rolling Stones",
+      "title": "Sympathy For The Devil",
+      "simulated_bpm": 116,
+      "deck": 1,
+      "energy": 0.58,
+      "transition": "genre_turn",
+      "cues": ["red_gold_palette", "percussion_response"]
+    }
+  ]
+}

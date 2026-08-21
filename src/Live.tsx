@@ -149,9 +149,10 @@ export default function Live() {
 
   const multiplier =
     config?.render.beat_time === "half" ? 0.5 : config?.render.beat_time === "double" ? 2 : 1;
-  const inferredBpm = (status?.audio.find((a) => a.active)?.bpm ?? 0) / multiplier;
+  const effectiveAutoBpm = status?.rhythm.bpm ?? status?.audio.find((a) => a.active)?.bpm ?? 0;
+  const inferredBpm = effectiveAutoBpm / multiplier;
   const manualBpm = config?.render.manual_bpm ?? null;
-  const bpm = manualBpm !== null ? manualBpm * multiplier : inferredBpm * multiplier;
+  const bpm = manualBpm !== null ? manualBpm * multiplier : effectiveAutoBpm;
 
   const setTempo = (patch: Partial<Pick<RenderConfig, "beat_time" | "manual_bpm">>) => {
     if (!config) return;
@@ -289,7 +290,7 @@ export default function Live() {
         <button
           className={manualBpm !== null ? "active" : ""}
           onClick={() =>
-            setTempo({ manual_bpm: Math.round(Math.min(240, Math.max(40, inferredBpm || 120))) })
+            setTempo({ manual_bpm: Math.round(Math.min(240, Math.max(10, inferredBpm || 120))) })
           }
         >
           Manual
@@ -299,7 +300,7 @@ export default function Live() {
         <label className="tempo-slider">
           <input
             type="range"
-            min={40}
+            min={10}
             max={240}
             step={1}
             value={manualBpm}
@@ -347,7 +348,11 @@ export default function Live() {
         <div className="ring-title">Empyrean Gate</div>
         <div className="ring-status">
           <div ref={beatDotRef} className="beat-dot" />
-          <span>{bpm > 0 ? `${bpm.toFixed(0)} BPM${manualBpm !== null ? " manual" : ""}` : "no beat"}</span>
+          <span>
+            {bpm > 0
+              ? `${bpm.toFixed(0)} BPM${manualBpm !== null ? " manual" : status?.rhythm.using_fallback ? " fallback" : status?.rhythm.source === "midi_clock" ? " MIDI" : status?.rhythm.source === "pro_dj_link" ? " LINK" : ""}`
+              : "no beat"}
+          </span>
         </div>
         {status && (
           <Sparkbars
