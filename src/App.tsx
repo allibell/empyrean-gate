@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import Control from "./Control";
 import { EFFECTS } from "./effects";
 import Live from "./Live";
+import { loadSelectedLiveColor } from "./liveColors";
 import Media from "./Media";
 import Settings from "./Settings";
 import { useGate } from "./state";
@@ -185,7 +186,14 @@ export default function App() {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       const fx = EFFECTS.find((f) => f.key === e.key);
       if (fx) {
-        client.triggerEffect({ kind: fx.kind, angle: Math.random() * Math.PI * 2 });
+        const color = loadSelectedLiveColor();
+        client.triggerEffect({
+          kind: fx.kind,
+          angle: Math.random() * Math.PI * 2,
+          hue: color.hue,
+          saturation: color.saturation,
+          brightness: color.brightness,
+        });
       }
     };
     window.addEventListener("keydown", onKey);

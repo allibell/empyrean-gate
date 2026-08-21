@@ -76,6 +76,10 @@ pub enum ClientMsg {
         /// Hue in turns; negative = white.
         #[serde(default)]
         hue: f32,
+        #[serde(default = "default_saturation")]
+        saturation: f32,
+        #[serde(default = "default_brightness")]
+        brightness: f32,
         /// Dab radius as a fraction of the array radius.
         #[serde(default = "default_dab_size")]
         size: f32,
@@ -166,6 +170,14 @@ fn default_dab_size() -> f32 {
 }
 
 fn default_intensity() -> f32 {
+    1.0
+}
+
+fn default_saturation() -> f32 {
+    0.85
+}
+
+fn default_brightness() -> f32 {
     1.0
 }
 
@@ -319,6 +331,22 @@ mod tests {
             message,
             ClientMsg::AudioFrame {
                 stream: BrowserAudioStream::Microphone,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn legacy_paint_defaults_to_the_original_color_profile() {
+        let message: ClientMsg = serde_json::from_str(
+            r#"{"type":"paint","pen":"glow","points":[],"hue":0.5,"size":0.12,"intensity":1.0}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            message,
+            ClientMsg::Paint {
+                saturation: 0.85,
+                brightness: 1.0,
                 ..
             }
         ));

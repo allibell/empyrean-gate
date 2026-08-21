@@ -57,6 +57,8 @@ export interface EffectCfg {
   intensity: number;
   size: number;
   hue: number;
+  saturation: number;
+  brightness: number;
   duration: number;
 }
 

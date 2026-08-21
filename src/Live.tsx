@@ -27,7 +27,16 @@ import {
 } from "./controlDecks";
 import { EFFECTS } from "./effects";
 import GateCanvas from "./GateCanvas";
+import CustomColorPicker from "./CustomColorPicker";
 import { QuickSettingsEditor, QuickSettingsPanel } from "./DeckQuickSettings";
+import {
+  BUILTIN_LIVE_COLORS,
+  loadCustomLiveColors,
+  loadSelectedLiveColor,
+  saveCustomLiveColors,
+  saveSelectedLiveColor,
+  type LiveColor,
+} from "./liveColors";
 import Sparkbars from "./Sparkbars";
 import { useGate, useThrottled } from "./state";
 import ToolIcon, { type ToolKind } from "./ToolIcon";
@@ -44,26 +53,12 @@ const TOOLS: { kind: ToolKind; label: string }[] = [
   { kind: "ember", label: "Ember" },
 ];
 
-const SWATCHES: { hue: number; label: string }[] = [
-  { hue: -1, label: "White" },
-  { hue: 0.0, label: "Red" },
-  { hue: 0.09, label: "Orange" },
-  { hue: 0.16, label: "Gold" },
-  { hue: 0.35, label: "Green" },
-  { hue: 0.5, label: "Cyan" },
-  { hue: 0.62, label: "Blue" },
-  { hue: 0.78, label: "Purple" },
-  { hue: 0.9, label: "Pink" },
-];
-
-function swatchColor(hue: number): string {
-  return hue < 0 ? "#ffffff" : `hsl(${hue * 360}deg 90% 60%)`;
-}
-
 export default function Live() {
   const { client, config, status, beatAt } = useGate();
   const [tool, setTool] = useState<ToolKind>("tap");
-  const [hue, setHue] = useState(0.5);
+  const [color, setColor] = useState<LiveColor>(loadSelectedLiveColor);
+  const [customColors, setCustomColors] = useState<LiveColor[]>(loadCustomLiveColors);
+  const [showColorPicker, setShowColorPicker] = useState(false);
   const [size, setSize] = useState(0.12);
   const [queuePos, setQueuePos] = useState(0);
   const [decks, setDecks] = useState<ControlDeck[]>(loadControlDecks);
@@ -96,6 +91,14 @@ export default function Live() {
   useEffect(() => {
     saveControlDecks(decks);
   }, [decks]);
+
+  useEffect(() => {
+    saveCustomLiveColors(customColors);
+  }, [customColors]);
+
+  useEffect(() => {
+    saveSelectedLiveColor(color);
+  }, [color]);
 
   useEffect(() => {
     localStorage.setItem("empyrean-active-control-deck", activeDeck.id);
@@ -196,7 +199,13 @@ export default function Live() {
         <button
           key={e.kind}
           className="effect-btn"
-          onClick={() => client.triggerEffect({ kind: e.kind, angle: Math.random() * Math.PI * 2 })}
+          onClick={() => client.triggerEffect({
+            kind: e.kind,
+            angle: Math.random() * Math.PI * 2,
+            hue: color.hue,
+            saturation: color.saturation,
+            brightness: color.brightness,
+          })}
         >
           {e.label}
           <span className="key-hint">{e.key}</span>
@@ -207,15 +216,22 @@ export default function Live() {
 
   const colors = (
     <div className="cluster swatches">
-      {SWATCHES.map((s) => (
+      {[...BUILTIN_LIVE_COLORS, ...customColors].map((entry) => (
         <button
-          key={s.label}
-          className={`swatch ${hue === s.hue ? "active" : ""}`}
-          style={{ background: swatchColor(s.hue) }}
-          onClick={() => setHue(s.hue)}
-          aria-label={s.label}
+          key={entry.id}
+          className={`swatch ${color.id === entry.id ? "active" : ""}`}
+          style={{ background: entry.hex }}
+          onClick={() => setColor(entry)}
+          aria-label={entry.label}
         />
       ))}
+      <button
+        className="swatch custom-color-button"
+        onClick={() => setShowColorPicker(true)}
+        aria-label="Choose and save a custom color"
+      >
+        +
+      </button>
     </div>
   );
 
@@ -289,11 +305,26 @@ export default function Live() {
   const preview = (
     <div className="live-canvas-wrap deck-preview-wrap">
       <GateCanvas
-        drawPen={tool === "tap" ? undefined : { pen: tool, hue, size, intensity: 1 }}
+        drawPen={tool === "tap" ? undefined : {
+          pen: tool,
+          hue: color.hue,
+          saturation: color.saturation,
+          brightness: color.brightness,
+          size,
+          intensity: 1,
+        }}
         onTap={
           tool === "tap"
             ? (angle, radius) =>
-                client.triggerEffect({ kind: "burst", angle, radius, hue, size: size / 0.12 })
+                client.triggerEffect({
+                  kind: "burst",
+                  angle,
+                  radius,
+                  hue: color.hue,
+                  saturation: color.saturation,
+                  brightness: color.brightness,
+                  size: size / 0.12,
+                })
             : undefined
         }
       />
@@ -566,6 +597,24 @@ export default function Live() {
           />
         );
       })()}
+      {showColorPicker && (
+        <CustomColorPicker
+          colors={customColors}
+          initialHex={color.hex}
+          onClose={() => setShowColorPicker(false)}
+          onRemove={(id) => {
+            setCustomColors((current) => current.filter((entry) => entry.id !== id));
+            if (color.id === id) setColor(BUILTIN_LIVE_COLORS[5]);
+          }}
+          onSave={(next) => {
+            const existing = customColors.find((entry) => entry.hex === next.hex);
+            const saved = existing ?? next;
+            if (!existing) setCustomColors((current) => [...current, next].slice(-24));
+            setColor(saved);
+            setShowColorPicker(false);
+          }}
+        />
+      )}
     </div>
   );
 }

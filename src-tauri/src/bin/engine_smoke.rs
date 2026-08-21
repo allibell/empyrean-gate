@@ -357,6 +357,9 @@ fn make_inputs(scenario: &Scenario, spokes: u32, pixels: u32) -> FrameInputs {
             size: 0.12,
             intensity: 1.0,
             dir: i as f32 * 0.13,
+            saturation: 0.85,
+            brightness: 1.0,
+            ..Default::default()
         })
         .collect();
     let mut scope = vec![0.0; SCOPE_FLOATS * MAX_AUDIO_SOURCES];

@@ -712,10 +712,12 @@ async fn handle_msg(
             pen,
             points,
             hue,
+            saturation,
+            brightness,
             size,
             intensity,
         } => {
-            state.paint(pen, &points, hue, size, intensity);
+            state.paint(pen, &points, hue, saturation, brightness, size, intensity);
         }
         ClientMsg::SubscribePreview { fps, decimate } => {
             *preview = Some(PreviewSub {
