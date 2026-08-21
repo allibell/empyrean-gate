@@ -53,7 +53,8 @@ live meters.
 - **PWA**: open the web UI on an iPad/phone, "Add to Home Screen", and it runs
   standalone fullscreen — a touch control surface for the floor. Manifest shortcuts
   jump straight to Draw or Control.
-- **Video intake**: paste a direct MP4/WebM URL or a publisher page with standard
+- **Video intake**: paste a public Instagram post/Reel URL, a direct MP4/WebM URL,
+  or a publisher page with standard
   `og:video` / HTML video metadata, or choose a file on the iPad. The browser uses
   its native hardware decoder and sends a bounded 64–128 px RGBA texture at 10–24
   fps; the backend retains only the latest frame, so congestion drops frames instead
@@ -63,8 +64,8 @@ live meters.
   configured live Gate input; soundtrack analysis sends only compact features and
   can stay silent on the control device. If current `yt-dlp` plus a supported
   JavaScript runtime is installed on the Gate machine, provider pages such as public
-  YouTube videos get an additional best-effort resolver. DRM/login-gated sources
-  remain unsupported.
+  YouTube and Instagram videos get an additional best-effort resolver.
+  DRM/login-gated sources remain unsupported.
 - **Autopilot**: a slow mean-reverting random walk drifts layer parameters around
   wherever the sliders are set (per-layer "Walk" amount = wander radius), so an
   unattended show evolves for hours without repeating.
