@@ -422,6 +422,64 @@ pub struct SavedStack {
     pub walk_depth: f32,
 }
 
+/// One timed composition in a saved unattended show. The stack is embedded rather
+/// than referenced by id so a playlist remains intact if its source scene is later
+/// edited or deleted.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlaylistEntry {
+    pub id: String,
+    pub name: String,
+    pub stack: SavedStack,
+    /// Time from this scene's arrival until the scheduler advances.
+    pub duration_secs: f32,
+    /// Crossfade time when entering this scene.
+    pub transition_secs: f32,
+}
+
+impl Default for PlaylistEntry {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: "Untitled scene".into(),
+            stack: SavedStack::default(),
+            duration_secs: 1_800.0,
+            transition_secs: 20.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SavedPlaylist {
+    pub id: String,
+    pub name: String,
+    pub entries: Vec<PlaylistEntry>,
+    /// Continue from the first entry after the last one finishes.
+    pub repeat: bool,
+}
+
+impl Default for SavedPlaylist {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: "Untitled show".into(),
+            entries: Vec::new(),
+            repeat: true,
+        }
+    }
+}
+
+/// Runtime selection for the backend-owned unattended show. The active index is
+/// persisted at each change, so a headless restart resumes the same playlist.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct ShowSchedulerConfig {
+    pub enabled: bool,
+    pub active_playlist_id: String,
+    pub current_index: u32,
+}
+
 impl Default for SavedStack {
     fn default() -> Self {
         Self {
@@ -453,6 +511,9 @@ pub struct AppConfig {
     pub layers: Vec<LayerCfg>,
     /// Named layer-stack captures shared by all clients.
     pub saved_stacks: Vec<SavedStack>,
+    /// Reusable timed shows and the currently running selection.
+    pub saved_playlists: Vec<SavedPlaylist>,
+    pub show_scheduler: ShowSchedulerConfig,
     /// Known client devices (see `ClientRecord`).
     pub clients: Vec<ClientRecord>,
 }
@@ -471,6 +532,8 @@ impl Default for AppConfig {
             beat_taps: BeatTapConfig::default(),
             layers: default_layer_stack(),
             saved_stacks: Vec::new(),
+            saved_playlists: Vec::new(),
+            show_scheduler: ShowSchedulerConfig::default(),
             clients: Vec::new(),
         }
     }
@@ -615,5 +678,51 @@ mod tests {
         let config: AppConfig = serde_json::from_value(value).unwrap();
         assert_eq!(config.rhythm.source, RhythmSource::LayerAudio);
         assert!(config.rhythm.fallback_to_audio);
+    }
+
+    #[test]
+    fn legacy_config_gets_an_idle_empty_show_scheduler() {
+        let mut value = serde_json::to_value(AppConfig::default()).unwrap();
+        let object = value.as_object_mut().unwrap();
+        object.remove("saved_playlists");
+        object.remove("show_scheduler");
+        let config: AppConfig = serde_json::from_value(value).unwrap();
+        assert!(config.saved_playlists.is_empty());
+        assert!(!config.show_scheduler.enabled);
+        assert!(config.show_scheduler.active_playlist_id.is_empty());
+    }
+
+    #[test]
+    fn playlist_embeds_a_restart_safe_scene_snapshot() {
+        let stack = SavedStack {
+            id: "scene-a".into(),
+            name: "Scene A".into(),
+            layers: default_layer_stack(),
+            walk_enabled: true,
+            ..Default::default()
+        };
+        let mut config = AppConfig::default();
+        config.saved_playlists.push(SavedPlaylist {
+            id: "night".into(),
+            name: "All night".into(),
+            entries: vec![PlaylistEntry {
+                id: "cue-a".into(),
+                name: "Scene A".into(),
+                stack,
+                duration_secs: 2_100.0,
+                transition_secs: 20.0,
+            }],
+            repeat: true,
+        });
+        config.show_scheduler = ShowSchedulerConfig {
+            enabled: true,
+            active_playlist_id: "night".into(),
+            current_index: 0,
+        };
+
+        let restored: AppConfig = serde_json::from_str(&serde_json::to_string(&config).unwrap()).unwrap();
+        assert!(restored.show_scheduler.enabled);
+        assert_eq!(restored.saved_playlists[0].entries[0].stack.layers.len(), 4);
+        assert_eq!(restored.saved_playlists[0].entries[0].duration_secs, 2_100.0);
     }
 }

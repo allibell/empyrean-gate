@@ -291,6 +291,20 @@ pub struct VideoSourceStatus {
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
+pub struct ScheduledShowStatus {
+    pub enabled: bool,
+    pub playlist_id: String,
+    pub playlist_name: String,
+    pub scene_name: String,
+    /// Zero-based active entry.
+    pub index: u32,
+    pub total: u32,
+    pub remaining_secs: f32,
+    /// 0 outside a transition; otherwise 0..1 as the incoming scene arrives.
+    pub transition_progress: f32,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct RuntimeStatus {
     /// Set when Vulkan init failed — the UI shows this prominently. No fallbacks.
     pub gpu_error: Option<String>,
@@ -333,6 +347,7 @@ pub struct RuntimeStatus {
     /// Updater progress / result note ("up to date", "downloading…", errors).
     pub update_state: String,
     pub video: VideoSourceStatus,
+    pub show: ScheduledShowStatus,
 }
 
 #[cfg(test)]

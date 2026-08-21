@@ -62,6 +62,27 @@ export interface SavedStack {
   walk_depth: number;
 }
 
+export interface PlaylistEntry {
+  id: string;
+  name: string;
+  stack: SavedStack;
+  duration_secs: number;
+  transition_secs: number;
+}
+
+export interface SavedPlaylist {
+  id: string;
+  name: string;
+  entries: PlaylistEntry[];
+  repeat: boolean;
+}
+
+export interface ShowSchedulerConfig {
+  enabled: boolean;
+  active_playlist_id: string;
+  current_index: number;
+}
+
 export interface EffectCfg {
   kind: EffectKind;
   angle: number;
@@ -192,6 +213,8 @@ export interface AppConfig {
   beat_taps: BeatTapConfig;
   layers: LayerCfg[];
   saved_stacks: SavedStack[];
+  saved_playlists: SavedPlaylist[];
+  show_scheduler: ShowSchedulerConfig;
   clients: ClientRecord[];
 }
 
@@ -257,6 +280,18 @@ export interface RuntimeStatus {
   update_available: string | null;
   update_state: string;
   video: VideoSourceStatus;
+  show: ScheduledShowStatus;
+}
+
+export interface ScheduledShowStatus {
+  enabled: boolean;
+  playlist_id: string;
+  playlist_name: string;
+  scene_name: string;
+  index: number;
+  total: number;
+  remaining_secs: number;
+  transition_progress: number;
 }
 
 export interface VideoSourceStatus {

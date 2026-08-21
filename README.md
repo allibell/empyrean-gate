@@ -43,10 +43,16 @@ live meters.
   stacked with blend modes, each bound to an audio source. Effects (burst / strobe /
   swoosh / collapse) fire from keyboard (1–4), clicks/taps on the preview, or remote
   clients.
-- **Four UI tabs**, deep-linkable by hash: Live (stage monitor + drawing), Video
-  (URL/file intake), Control (touch-sized effect pads + master/layer faders), and Settings. In the desktop app,
+- **Five UI tabs**, deep-linkable by hash: Live (stage monitor + drawing), Media
+  (image/video intake), Archive (recorded-show replay), Control (touch-sized effect
+  pads + master/layer faders), and Settings. In the desktop app,
   "New window" pops the current tab out into its own window. Old `/#view` and `/#draw`
   links redirect to Live.
+- **Archived-show replay**: open individual Uprising `.eg.data` RGB recordings or
+  index an entire `Uprising-Data` checkout. Playback streams one 64×378 frame at a
+  time from disk, supports seeking, looping, and variable playback speed, and keeps
+  recent filesystem references without copying the recordings. Archive is available
+  in production desktop, headless web, and PWA builds.
 - **Live drawing**: paint on the array from any client with Glow / Ripple / Sparkle
   pens (color swatches + size). Strokes stream as polar dabs over WS and render on the
   GPU with ~2 s trails; multiple people can draw at once.
@@ -69,6 +75,12 @@ live meters.
 - **Autopilot**: a slow mean-reverting random walk drifts layer parameters around
   wherever the sliders are set (per-layer "Walk" amount = wander radius), so an
   unattended show evolves for hours without repeating.
+- **Set-and-forget shows**: saved playlists embed complete scene snapshots with a
+  dwell time and smooth crossfade per cue. The backend advances them without an
+  open browser, loops indefinitely when requested, persists the active cue across
+  restarts, and exposes skip/hold controls plus a live countdown. The built-in
+  all-night journey rotates through nine restrained compositions instead of
+  leaving one look on the installation for hours.
 - **Audio loopback**: pick a system *output* device as a source (WASAPI loopback) —
   music played on the show machine drives the beat with no cabling.
 - **External lighting clock**: timing and audio energy are separate. By default each
@@ -156,9 +168,10 @@ Useful during pattern development:
   fetch the small **Warm Windstorm** clip referenced by the saved 2024 show state. It
   lands in the shared per-user cache at
   `${XDG_DATA_HOME:-~/.local/share}/empyrean-gate/uprising/`, so every Git worktree sees
-  the same archive. While Vite is running, open the **Archive** tab to load it in the
-  development-only frame fixture viewer; it is omitted from production builds. Override
-  the location with `EMPYREAN_UPRISING_DIR` when needed.
+  the same archive. While Vite is running, that cache appears automatically in the
+  production-grade **Archive** tab; production builds can always open files or index
+  an `Uprising-Data` folder directly. Override the cache location with
+  `EMPYREAN_UPRISING_DIR` when needed.
 - `bun scripts/e2e-test.ts` — protocol smoke test against a running backend.
   It also sends a generated video texture and verifies live source status.
 

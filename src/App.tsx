@@ -1,32 +1,29 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Control from "./Control";
 import { EFFECTS } from "./effects";
 import Live from "./Live";
 import { loadSelectedLiveColor } from "./liveColors";
 import Media from "./Media";
+import Replay from "./Replay";
 import Settings from "./Settings";
 import { useGate } from "./state";
 
 const TABS = [
   { id: "live", label: "Live" },
   { id: "media", label: "Media" },
+  { id: "replay", label: "Archive" },
   { id: "control", label: "Control" },
   { id: "settings", label: "Settings" },
 ] as const;
 
-const NAV_TABS: ReadonlyArray<{ id: TabId; label: string }> = import.meta.env.DEV
-  ? [...TABS, { id: "replay", label: "Archive" }]
-  : TABS;
+const NAV_TABS: ReadonlyArray<{ id: TabId; label: string }> = TABS;
 
-type TabId = (typeof TABS)[number]["id"] | "replay";
-
-const DevReplay = import.meta.env.DEV ? lazy(() => import("./Replay")) : null;
+type TabId = (typeof TABS)[number]["id"];
 
 function tabFromHash(): TabId {
   const h = location.hash.replace("#", "");
   // Old bookmarks / PWA shortcuts used #view and #draw; both merged into Live.
   if (h === "view" || h === "draw") return "live";
-  if (import.meta.env.DEV && h === "replay") return "replay";
   return (TABS.find((t) => t.id === h)?.id ?? "live") as TabId;
 }
 
@@ -271,9 +268,7 @@ export default function App() {
         >
           <Media />
         </div>
-        {tab === "replay" && DevReplay && (
-          <Suspense fallback={null}><DevReplay /></Suspense>
-        )}
+        {tab === "replay" && <Replay />}
         {tab === "control" && <Control />}
         {tab === "settings" && <Settings />}
       </main>

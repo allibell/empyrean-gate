@@ -9,7 +9,7 @@
 //! zero pipeline stalls.
 
 use crate::layers::{GpuDab, GpuEffect, GpuLayer, MAX_AUDIO_SOURCES, MAX_DABS, MAX_EFFECTS, MAX_LAYERS};
-use crate::protocol::{ServerMsg, MAX_VIDEO_DIMENSION};
+use crate::protocol::{ScheduledShowStatus, ServerMsg, MAX_VIDEO_DIMENSION};
 use crate::sacn::SacnSender;
 use crate::state::{PreviewFrame, SharedState};
 use anyhow::{Context, Result};
@@ -679,6 +679,15 @@ fn run_frames(state: &Arc<SharedState>, engine: &mut Engine) {
     let mut frame_number: u64 = 0;
     let mut video_revision: u64 = u64::MAX;
 
+    // The show clock belongs to the backend, not a browser. `current_stack` and
+    // `transition_from` are render-only snapshots; the durable selection/index
+    // lives in AppConfig and is advanced below.
+    let mut show_key = String::new();
+    let mut scene_started = Instant::now();
+    let mut current_stack: Option<crate::config::SavedStack> = None;
+    let mut transition_from: Option<crate::config::SavedStack> = None;
+    let mut advance_requested = false;
+
     // Per-second buckets for the UI history bars (frames rendered / packets sent).
     let mut sec_start = Instant::now();
     let mut frames_this_sec: u32 = 0;
@@ -741,11 +750,6 @@ fn run_frames(state: &Arc<SharedState>, engine: &mut Engine) {
         if state.phases_transplanted.swap(false, Ordering::SeqCst) {
             layer_phases = state.layer_phases.lock().clone();
         }
-        layer_phases.resize(cfg.layers.len(), 0.0);
-        layer_walks.resize(cfg.layers.len(), LayerWalk::default());
-        layer_target.resize(cfg.layers.len(), true);
-        layer_env.resize(cfg.layers.len(), 1.0);
-
         // Pace the loop.
         let target_dt = Duration::from_secs_f32(1.0 / cfg.render.fps.clamp(1.0, 240.0));
         let elapsed = last_frame.elapsed();
@@ -761,6 +765,141 @@ fn run_frames(state: &Arc<SharedState>, engine: &mut Engine) {
         let now = Instant::now();
         let dt = (now - last_frame).as_secs_f32();
         last_frame = now;
+
+        // Resolve the active timed show and build a temporary layer stack. Both
+        // scenes are rendered during a transition, with a smoothstep opacity
+        // envelope; after the fade, incoming animation phases are shifted down so
+        // finishing a transition never causes a visible motion jump.
+        let scheduled = if cfg.show_scheduler.enabled {
+            cfg.saved_playlists
+                .iter()
+                .find(|p| p.id == cfg.show_scheduler.active_playlist_id && !p.entries.is_empty())
+                .map(|p| {
+                    let index = (cfg.show_scheduler.current_index as usize).min(p.entries.len() - 1);
+                    (p, index, &p.entries[index])
+                })
+        } else {
+            None
+        };
+        let mut show_status = ScheduledShowStatus::default();
+        let mut render_layers = cfg.layers.clone();
+        let mut render_master_speed = cfg.render.master_speed;
+        let mut render_walk_enabled = cfg.render.walk_enabled;
+        let mut render_walk_layers = cfg.render.walk_layers;
+        let mut render_walk_min_layers = cfg.render.walk_min_layers;
+        let mut render_walk_speed = cfg.render.walk_speed;
+        let mut render_walk_depth = cfg.render.walk_depth;
+
+        if let Some((playlist, index, entry)) = scheduled {
+            // Timing edits should take effect without restarting the current cue;
+            // identity/index changes are the actual transition boundary.
+            let key = format!("{}:{index}:{}", playlist.id, entry.id);
+            if key != show_key {
+                let previous = current_stack.take().unwrap_or_else(|| crate::config::SavedStack {
+                    id: "live-stack".into(),
+                    name: "Current look".into(),
+                    layers: cfg.layers.clone(),
+                    master_speed: cfg.render.master_speed,
+                    walk_enabled: cfg.render.walk_enabled,
+                    walk_layers: cfg.render.walk_layers,
+                    walk_min_layers: cfg.render.walk_min_layers,
+                    walk_speed: cfg.render.walk_speed,
+                    walk_depth: cfg.render.walk_depth,
+                });
+                transition_from = Some(previous);
+                current_stack = Some(entry.stack.clone());
+                show_key = key;
+                scene_started = now;
+                advance_requested = false;
+            }
+
+            let target = current_stack.as_ref().expect("scheduled stack");
+            render_master_speed = target.master_speed;
+            render_walk_enabled = target.walk_enabled;
+            render_walk_layers = target.walk_layers;
+            render_walk_min_layers = target.walk_min_layers;
+            render_walk_speed = target.walk_speed;
+            render_walk_depth = target.walk_depth;
+
+            let elapsed = scene_started.elapsed().as_secs_f32();
+            let transition_secs = entry.transition_secs.clamp(0.0, 300.0);
+            let linear = if transition_secs <= 0.001 {
+                1.0
+            } else {
+                (elapsed / transition_secs).clamp(0.0, 1.0)
+            };
+            let fade = linear * linear * (3.0 - 2.0 * linear);
+
+            if linear >= 1.0 && transition_from.is_some() {
+                let old_len = transition_from.as_ref().map_or(0, |s| s.layers.len().min(MAX_LAYERS));
+                for i in 0..target.layers.len().min(MAX_LAYERS) {
+                    if old_len + i < layer_phases.len() {
+                        layer_phases[i] = layer_phases[old_len + i];
+                        layer_walks[i] = layer_walks[old_len + i].clone();
+                        layer_target[i] = layer_target[old_len + i];
+                        layer_env[i] = layer_env[old_len + i];
+                    }
+                }
+                transition_from = None;
+            }
+
+            render_layers.clear();
+            if let Some(old) = transition_from.as_ref() {
+                render_layers.extend(old.layers.iter().cloned().map(|mut layer| {
+                    layer.opacity *= 1.0 - fade;
+                    layer
+                }));
+            }
+            render_layers.extend(target.layers.iter().cloned().map(|mut layer| {
+                layer.opacity *= fade;
+                layer
+            }));
+            render_layers.truncate(MAX_LAYERS);
+
+            let duration = entry.duration_secs.clamp(10.0, 86_400.0);
+            show_status = ScheduledShowStatus {
+                enabled: true,
+                playlist_id: playlist.id.clone(),
+                playlist_name: playlist.name.clone(),
+                scene_name: entry.name.clone(),
+                index: index as u32,
+                total: playlist.entries.len() as u32,
+                remaining_secs: (duration - elapsed).max(0.0),
+                transition_progress: if linear < 1.0 { fade } else { 0.0 },
+            };
+
+            if elapsed >= duration && !advance_requested {
+                advance_requested = true;
+                let playlist_id = playlist.id.clone();
+                let is_last = index + 1 >= playlist.entries.len();
+                let repeat = playlist.repeat;
+                let hold = target.clone();
+                state.update_config(move |c| {
+                    if is_last && !repeat {
+                        c.layers = hold.layers;
+                        c.render.master_speed = hold.master_speed;
+                        c.render.walk_enabled = hold.walk_enabled;
+                        c.render.walk_layers = hold.walk_layers;
+                        c.render.walk_min_layers = hold.walk_min_layers;
+                        c.render.walk_speed = hold.walk_speed;
+                        c.render.walk_depth = hold.walk_depth;
+                        c.show_scheduler.enabled = false;
+                    } else if c.show_scheduler.active_playlist_id == playlist_id {
+                        c.show_scheduler.current_index = if is_last { 0 } else { index as u32 + 1 };
+                    }
+                });
+            }
+        } else {
+            show_key.clear();
+            current_stack = None;
+            transition_from = None;
+            advance_requested = false;
+        }
+
+        layer_phases.resize(render_layers.len(), 0.0);
+        layer_walks.resize(render_layers.len(), LayerWalk::default());
+        layer_target.resize(render_layers.len(), true);
+        layer_env.resize(render_layers.len(), 1.0);
 
         if let Some(bpm) = cfg.render.manual_bpm {
             let next = manual_beat_phase + dt * bpm.clamp(10.0, 400.0) / 60.0;
@@ -849,7 +988,7 @@ fn run_frames(state: &Arc<SharedState>, engine: &mut Engine) {
             scope_data[base + 256..base + SCOPE_FLOATS].copy_from_slice(&s.spectrum);
         }
         let control = *state.control.lock();
-        let walk_tau = 45.0 / cfg.render.walk_speed.clamp(0.05, 20.0);
+        let walk_tau = 45.0 / render_walk_speed.clamp(0.05, 20.0);
 
         // Beat taps: on each detected beat (phase wrap) of the chosen source, fire
         // a burst at a point orbiting the ring — the automated spiral-tap.
@@ -910,18 +1049,17 @@ fn run_frames(state: &Arc<SharedState>, engine: &mut Engine) {
 
         // Gray-code walk across which layers play: flip exactly one layer per step
         // among the user-enabled pool, keeping at least `walk_min_layers` on.
-        let walk_layers_on = cfg.render.walk_enabled && cfg.render.walk_layers;
+        let walk_layers_on = render_walk_enabled && render_walk_layers;
         if walk_layers_on && now >= next_flip {
             next_flip = now + Duration::from_secs_f32(walk_tau);
-            let eligible: Vec<usize> = cfg
-                .layers
+            let eligible: Vec<usize> = render_layers
                 .iter()
                 .enumerate()
                 .take(MAX_LAYERS)
                 .filter(|(_, l)| l.enabled)
                 .map(|(i, _)| i)
                 .collect();
-            let min_on = (cfg.render.walk_min_layers as usize).min(eligible.len());
+            let min_on = (render_walk_min_layers as usize).min(eligible.len());
             let on_count = eligible.iter().filter(|i| layer_target[**i]).count();
             if !eligible.is_empty() {
                 for _ in 0..8 {
@@ -939,8 +1077,8 @@ fn run_frames(state: &Arc<SharedState>, engine: &mut Engine) {
             }
         }
 
-        let mut layers = Vec::with_capacity(cfg.layers.len().min(MAX_LAYERS));
-        for (i, l) in cfg.layers.iter().take(MAX_LAYERS).enumerate() {
+        let mut layers = Vec::with_capacity(render_layers.len().min(MAX_LAYERS));
+        for (i, l) in render_layers.iter().take(MAX_LAYERS).enumerate() {
             // Envelope eases layers in/out of the mix over a few seconds.
             let target = if walk_layers_on { layer_target[i] } else { true };
             let goal = if target { 1.0 } else { 0.0 };
@@ -950,20 +1088,20 @@ fn run_frames(state: &Arc<SharedState>, engine: &mut Engine) {
             }
             if layer_env[i] < 0.005 {
                 // Fully faded out by the walk — keep its phase moving, skip the GPU.
-                layer_phases[i] += (l.speed * cfg.render.master_speed * dt) as f64;
+                layer_phases[i] += (l.speed * render_master_speed * dt) as f64;
                 continue;
             }
-            let mut l = if cfg.render.walk_enabled && l.walk_amount > 0.0 {
+            let mut l = if render_walk_enabled && l.walk_amount > 0.0 {
                 walk_step(&mut layer_walks[i], &mut walk_rng, dt, walk_tau);
                 // Global depth scales how far every layer wanders from its sliders.
                 let mut scaled = l.clone();
-                scaled.walk_amount = (l.walk_amount * cfg.render.walk_depth).clamp(0.0, 3.0);
+                scaled.walk_amount = (l.walk_amount * render_walk_depth).clamp(0.0, 3.0);
                 walked_layer(&scaled, &layer_walks[i])
             } else {
                 l.clone()
             };
             l.opacity *= layer_env[i];
-            layer_phases[i] += (l.speed * cfg.render.master_speed * dt) as f64;
+            layer_phases[i] += (l.speed * render_master_speed * dt) as f64;
             layers.push(l.to_gpu(layer_phases[i] as f32));
         }
         *state.layer_phases.lock() = layer_phases.clone();
@@ -1167,7 +1305,8 @@ fn run_frames(state: &Arc<SharedState>, engine: &mut Engine) {
                 st.fps_history = fps_hist.iter().copied().collect();
                 st.pps_history = pps_hist.iter().copied().collect();
                 st.master_brightness = cfg.render.master_brightness;
-                st.master_speed = cfg.render.master_speed;
+                st.master_speed = render_master_speed;
+                st.show = show_status.clone();
                 st.pro_dj_link_devices = pioneer_devices
                     .iter()
                     .map(|device| crate::protocol::ProDjLinkDeviceInfo {

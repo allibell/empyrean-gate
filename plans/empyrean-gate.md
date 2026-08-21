@@ -352,6 +352,31 @@ audit found the identity/lifecycle half of E1.31 was unimplemented.
 - Media follow-ups: resilient provider-specific extraction and authenticated/DRM
   sources only if a deployment actually requires them.
 
+## Round 12: unattended show scheduler
+
+- [x] Durable saved playlists with embedded scene snapshots, per-cue dwell and
+      crossfade times, reordering, add/remove, naming, repeat, skip, and stop/hold.
+- [x] Backend-owned show clock: advances headlessly, persists the active cue, and
+      resumes the enabled playlist after a process restart without a controller.
+- [x] Smoothstep layer-stack crossfades with incoming phase preservation, so the
+      end of a transition does not reset the new scene's motion.
+- [x] Nine built-in long-play compositions and a one-click all-night journey
+      (35 minutes each, 20 second transitions, repeat forever).
+- [x] Accelerated two-scene integration run: transition observed, auto-advance
+      confirmed, no GPU error, and active cue restored after restart.
+- [ ] Real PixLite/sACN and production Mac mini validation is deliberately deferred
+      until the installation hardware is unpacked on playa next week.
+
+## Round 13: restore Replay as a production workflow
+
+- [x] Reversed the product-level intent of `8a8325e`: Archive is again a normal
+      production tab and `/#replay` works in desktop, headless web, and PWA builds.
+- [x] Restored single-file playback, whole `Uprising-Data` folder indexing,
+      metadata titles, recent filesystem references, seeking, looping, and variable
+      playback speed. Recordings remain local and stream one frame at a time.
+- [x] Kept the shared per-user Vite fixture cache as an optional development
+      convenience without making Replay depend on that endpoint.
+
 ## Round 11: external rhythm sources
 
 - [x] Split lighting timing from per-layer audio energy without changing the default
