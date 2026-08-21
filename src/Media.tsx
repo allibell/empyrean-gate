@@ -7,6 +7,131 @@ import type { ResolvedMedia } from "./ws";
 const FRAME_RATES = [10, 15, 24];
 const TEXTURE_SIZES = [64, 96, 128];
 type AudioMode = "none" | "video" | `source:${number}`;
+type MediaKind = "video" | "image";
+type ImageMotion = "still" | "ambient" | "breathe" | "drift" | "haze" | "fade";
+type ImageFit = "contain" | "cover";
+
+interface LoadedMedia extends ResolvedMedia {
+  kind: MediaKind;
+}
+
+interface ImageAnimationSettings {
+  motion: ImageMotion;
+  intensity: number;
+  seconds: number;
+  fit: ImageFit;
+  fadeWhite: boolean;
+}
+
+const IMAGE_MOTIONS: ReadonlyArray<{ value: ImageMotion; label: string }> = [
+  { value: "ambient", label: "Ambient float" },
+  { value: "breathe", label: "Slow breathe" },
+  { value: "drift", label: "Orbital drift" },
+  { value: "haze", label: "Dream haze" },
+  { value: "fade", label: "Arrive & fade" },
+  { value: "still", label: "Still" },
+];
+
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+const smooth = (value: number) => {
+  const t = clamp01(value);
+  return t * t * (3 - 2 * t);
+};
+
+function fadeWhitePixels(ctx: CanvasRenderingContext2D, size: number): void {
+  const frame = ctx.getImageData(0, 0, size, size);
+  const pixels = frame.data;
+  for (let index = 0; index < pixels.length; index += 4) {
+    const r = pixels[index];
+    const g = pixels[index + 1];
+    const b = pixels[index + 2];
+    const high = Math.max(r, g, b);
+    const low = Math.min(r, g, b);
+    const neutral = 1 - clamp01((high - low) / 42);
+    const white = smooth((low - 188) / 67) * neutral;
+    pixels[index + 3] = Math.round(pixels[index + 3] * (1 - white));
+  }
+  ctx.putImageData(frame, 0, 0);
+}
+
+function drawAnimatedImage(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  size: number,
+  elapsedMs: number,
+  settings: ImageAnimationSettings,
+): void {
+  const cycle = Math.max(5, settings.seconds) * 1000;
+  const progress = (elapsedMs % cycle) / cycle;
+  const wave = Math.sin(progress * Math.PI * 2);
+  const wave2 = Math.sin(progress * Math.PI * 4 + 0.8);
+  const amount = settings.intensity;
+  let scale = 1;
+  let x = 0;
+  let y = 0;
+  let rotation = 0;
+  let opacity = 1;
+  let blur = 0;
+
+  switch (settings.motion) {
+    case "ambient":
+      scale = 1 + amount * (0.035 + wave * 0.018);
+      x = size * amount * 0.025 * wave2;
+      y = size * amount * 0.018 * Math.cos(progress * Math.PI * 2);
+      rotation = amount * 0.018 * wave;
+      opacity = 0.92 + wave2 * 0.05;
+      blur = amount * (0.4 + (wave + 1) * 0.35);
+      break;
+    case "breathe":
+      scale = 1 + amount * (0.025 + (wave + 1) * 0.025);
+      opacity = 0.88 + (wave + 1) * 0.06;
+      break;
+    case "drift":
+      scale = 1 + amount * 0.045;
+      x = size * amount * 0.045 * Math.sin(progress * Math.PI * 2);
+      y = size * amount * 0.035 * Math.sin(progress * Math.PI * 4 + 1.2);
+      rotation = amount * 0.035 * wave2;
+      break;
+    case "haze":
+      scale = 1 + amount * (0.035 + (wave + 1) * 0.018);
+      opacity = 0.82 + (wave2 + 1) * 0.08;
+      blur = amount * (0.7 + (wave + 1) * 1.1);
+      break;
+    case "fade": {
+      scale = 0.97 + amount * 0.1 * smooth(progress);
+      const envelope = progress < 0.14
+        ? smooth(progress / 0.14)
+        : progress < 0.7
+          ? 1
+          : 1 - smooth((progress - 0.7) / 0.3);
+      opacity = envelope;
+      rotation = amount * 0.018 * wave;
+      blur = amount * (1 - envelope) * 2;
+      break;
+    }
+    case "still":
+      break;
+  }
+
+  const naturalWidth = image.naturalWidth;
+  const naturalHeight = image.naturalHeight;
+  const baseScale = settings.fit === "cover"
+    ? Math.max(size / naturalWidth, size / naturalHeight)
+    : Math.min(size / naturalWidth, size / naturalHeight);
+  const width = naturalWidth * baseScale * scale;
+  const height = naturalHeight * baseScale * scale;
+
+  ctx.clearRect(0, 0, size, size);
+  ctx.save();
+  ctx.translate(size / 2 + x, size / 2 + y);
+  ctx.rotate(rotation);
+  ctx.globalAlpha = clamp01(opacity);
+  ctx.filter = blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : "none";
+  ctx.drawImage(image, -width / 2, -height / 2, width, height);
+  ctx.restore();
+  ctx.filter = "none";
+  if (settings.fadeWhite) fadeWhitePixels(ctx, size);
+}
 
 interface SoundtrackGraph {
   element: HTMLVideoElement;
@@ -20,7 +145,7 @@ interface SoundtrackGraph {
 export default function Media() {
   const { client, config, connected, status } = useGate();
   const [url, setUrl] = useState("");
-  const [media, setMedia] = useState<ResolvedMedia | null>(null);
+  const [media, setMedia] = useState<LoadedMedia | null>(null);
   const [resolving, setResolving] = useState(false);
   const [broadcasting, setBroadcasting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,13 +154,33 @@ export default function Media() {
   const [audioMode, setAudioMode] = useState<AudioMode>("video");
   const [audioAmount, setAudioAmount] = useState(0.7);
   const [monitorSoundtrack, setMonitorSoundtrack] = useState(false);
+  const [imageMotion, setImageMotion] = useState<ImageMotion>("ambient");
+  const [imageMotionAmount, setImageMotionAmount] = useState(0.65);
+  const [imageCycleSeconds, setImageCycleSeconds] = useState(60);
+  const [imageFit, setImageFit] = useState<ImageFit>("contain");
+  const [fadeWhite, setFadeWhite] = useState(true);
   const [sent, setSent] = useState(0);
   const [dropped, setDropped] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const localObjectUrl = useRef<string | null>(null);
   const claimStartedAt = useRef(0);
   const soundtrackRef = useRef<SoundtrackGraph | null>(null);
+  const imageAnimationRef = useRef<ImageAnimationSettings>({
+    motion: "ambient",
+    intensity: 0.65,
+    seconds: 60,
+    fit: "contain",
+    fadeWhite: true,
+  });
+  imageAnimationRef.current = {
+    motion: imageMotion,
+    intensity: imageMotionAmount,
+    seconds: imageCycleSeconds,
+    fit: imageFit,
+    fadeWhite,
+  };
 
   const pauseSoundtrack = () => {
     const graph = soundtrackRef.current;
@@ -117,17 +262,23 @@ export default function Media() {
     return true;
   };
 
-  const replaceMedia = (next: ResolvedMedia) => {
+  const replaceMedia = (next: LoadedMedia) => {
     destroySoundtrack();
     if (localObjectUrl.current && localObjectUrl.current !== next.playbackUrl) {
       URL.revokeObjectURL(localObjectUrl.current);
-      localObjectUrl.current = null;
     }
+    localObjectUrl.current = next.playbackUrl.startsWith("blob:") ? next.playbackUrl : null;
     setBroadcasting(false);
     setSent(0);
     setDropped(0);
     setError(null);
     setMedia(next);
+    if (next.kind === "image") {
+      setAudioMode("none");
+      setFadeWhite(true);
+    } else {
+      setAudioMode("video");
+    }
   };
 
   const resolveUrl = async () => {
@@ -135,7 +286,7 @@ export default function Media() {
     setResolving(true);
     setError(null);
     try {
-      replaceMedia(await client.resolveMedia(url.trim()));
+      replaceMedia({ ...await client.resolveMedia(url.trim()), kind: "video" });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -145,21 +296,33 @@ export default function Media() {
 
   const loadFile = (file: File | undefined) => {
     if (!file) return;
+    const isImage = file.type.startsWith("image/") || /\.(avif|gif|heic|jpe?g|png|webp)$/i.test(file.name);
+    const isVideo = file.type.startsWith("video/") || /\.(m4v|mov|mp4|webm)$/i.test(file.name);
+    if (!isImage && !isVideo) {
+      setError("Choose an image or video file that this browser can display.");
+      return;
+    }
     const playbackUrl = URL.createObjectURL(file);
-    localObjectUrl.current = playbackUrl;
     replaceMedia({
       playbackUrl,
       title: file.name,
       sourceUrl: `local file: ${file.name}`,
       resolvedBy: "this device",
+      kind: isImage ? "image" : "video",
     });
   };
 
   const goLive = () => {
     const video = videoRef.current;
-    if (!video || !media) return;
+    const image = imageRef.current;
+    if (!media || (media.kind === "video" && !video)) return;
+    if (media.kind === "image" && (!image || !image.complete || image.naturalWidth === 0)) {
+      setError("The image is still loading. Try again in a moment.");
+      return;
+    }
     if (!configureVideoReaction(audioMode, audioAmount)) return;
-    if (audioMode === "video") {
+    if (media.kind === "video" && audioMode === "video") {
+      if (!video) return;
       try {
         startSoundtrack(video);
       } catch (e) {
@@ -171,6 +334,12 @@ export default function Media() {
     }
     claimStartedAt.current = performance.now();
     client.startVideo(media.title, media.sourceUrl);
+    if (media.kind === "image") {
+      pauseSoundtrack();
+      setBroadcasting(true);
+      return;
+    }
+    if (!video) return;
     // Calling play synchronously from this tap matters on iPadOS.
     void video
       .play()
@@ -193,9 +362,10 @@ export default function Media() {
   useEffect(() => {
     if (!broadcasting || !media || !connected) return;
     const video = videoRef.current;
+    const image = imageRef.current;
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d", { willReadFrequently: true });
-    if (!video || !canvas || !ctx) return;
+    if (!canvas || !ctx || (media.kind === "video" ? !video : !image)) return;
     claimStartedAt.current = performance.now();
     client.startVideo(media.title, media.sourceUrl);
     canvas.width = textureSize;
@@ -208,10 +378,33 @@ export default function Media() {
 
     const capture = (now: number) => {
       if (cancelled) return;
-      if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && now - lastSent >= interval) {
-        const sw = video.videoWidth;
-        const sh = video.videoHeight;
-        if (sw > 0 && sh > 0) {
+      if (now - lastSent >= interval) {
+        if (media.kind === "image" && image && image.complete && image.naturalWidth > 0) {
+          try {
+            drawAnimatedImage(
+              ctx,
+              image,
+              textureSize,
+              now - claimStartedAt.current,
+              imageAnimationRef.current,
+            );
+            const rgba = ctx.getImageData(0, 0, textureSize, textureSize).data;
+            if (client.sendVideoFrame(textureSize, textureSize, rgba)) {
+              setSent((n) => n + 1);
+            } else {
+              setDropped((n) => n + 1);
+            }
+            lastSent = now;
+          } catch {
+            setError("The browser could not animate this image. Try a PNG, JPEG, or WebP file.");
+            setBroadcasting(false);
+            client.stopVideo();
+            return;
+          }
+        } else if (media.kind === "video" && video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          const sw = video.videoWidth;
+          const sh = video.videoHeight;
+          if (sw > 0 && sh > 0) {
           // Center-crop to a square before the GPU's radial/kaleidoscope mapping.
           const side = Math.min(sw, sh);
           const sx = (sw - side) / 2;
@@ -231,13 +424,14 @@ export default function Media() {
             client.stopVideo();
             return;
           }
+          }
         }
       }
       schedule();
     };
 
     const schedule = () => {
-      if ("requestVideoFrameCallback" in video) {
+      if (media.kind === "video" && video && "requestVideoFrameCallback" in video) {
         callbackId = video.requestVideoFrameCallback((now) => capture(now));
       } else {
         timer = window.setTimeout(() => capture(performance.now()), interval);
@@ -246,7 +440,7 @@ export default function Media() {
     schedule();
     return () => {
       cancelled = true;
-      if (callbackId && "cancelVideoFrameCallback" in video) {
+      if (callbackId && video && "cancelVideoFrameCallback" in video) {
         video.cancelVideoFrameCallback(callbackId);
       }
       clearTimeout(timer);
@@ -289,7 +483,7 @@ export default function Media() {
     setAudioMode(next);
     if (!broadcasting) return;
     if (!configureVideoReaction(next, audioAmount)) return;
-    if (next === "video" && videoRef.current) {
+    if (next === "video" && media?.kind === "video" && videoRef.current) {
       try {
         startSoundtrack(videoRef.current);
       } catch (e) {
@@ -305,10 +499,11 @@ export default function Media() {
       <section className="panel media-source-panel">
         <div className="media-heading">
           <div>
-            <h2>Video source</h2>
+            <h2>Image or video source</h2>
             <p className="hint">
-              Paste a direct video or publisher-page URL. The Gate resolves it to a same-origin
-              stream, your device decodes it, and only a tiny live texture crosses the show LAN.
+              Bring in a still image from this device or paste a video URL. Still images can float,
+              breathe, haze, or fade for ambient and long-play scenes; only a tiny live texture
+              crosses the show LAN.
             </p>
           </div>
           {active?.active && (
@@ -337,27 +532,44 @@ export default function Media() {
           </button>
         </form>
         <div className="media-or"><span>or</span></div>
-        <label className="media-file-button">
-          Choose a video on this device
-          <input type="file" accept="video/*" onChange={(e) => loadFile(e.target.files?.[0])} />
-        </label>
+        <div className="media-file-buttons">
+          <label className="media-file-button">
+            Choose an image
+            <input type="file" accept="image/*" onChange={(e) => loadFile(e.target.files?.[0])} />
+          </label>
+          <label className="media-file-button">
+            Choose a video
+            <input type="file" accept="video/*" onChange={(e) => loadFile(e.target.files?.[0])} />
+          </label>
+        </div>
         {error && <p className="media-error">{error}</p>}
       </section>
 
       {media && (
         <section className="panel media-player-panel">
           <div className="media-stage">
-            <video
-              ref={videoRef}
-              key={media.playbackUrl}
-              src={media.playbackUrl}
-              controls
-              playsInline
-              muted={audioMode !== "video" || !broadcasting}
-              loop
-              preload="metadata"
-              crossOrigin="anonymous"
-            />
+            {media.kind === "video" ? (
+              <video
+                ref={videoRef}
+                key={media.playbackUrl}
+                src={media.playbackUrl}
+                controls
+                playsInline
+                muted={audioMode !== "video" || !broadcasting}
+                loop
+                preload="metadata"
+                crossOrigin="anonymous"
+              />
+            ) : (
+              <img
+                ref={imageRef}
+                key={media.playbackUrl}
+                src={media.playbackUrl}
+                alt={media.title}
+                onLoad={() => setError(null)}
+                onError={() => setError("This browser could not decode that image. Try PNG, JPEG, or WebP.")}
+              />
+            )}
             <canvas ref={canvasRef} className="media-texture-preview" aria-label="Texture sent to the Gate" />
           </div>
           <div className="media-info">
@@ -380,11 +592,55 @@ export default function Media() {
               </label>
             </div>
           </div>
+          {media.kind === "image" && (
+            <div className="media-image-controls">
+              <label>
+                Motion
+                <select value={imageMotion} onChange={(e) => setImageMotion(e.target.value as ImageMotion)}>
+                  {IMAGE_MOTIONS.map((motion) => (
+                    <option key={motion.value} value={motion.value}>{motion.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="media-motion-amount">
+                Amount <strong>{Math.round(imageMotionAmount * 100)}%</strong>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={imageMotionAmount}
+                  disabled={imageMotion === "still"}
+                  onChange={(e) => setImageMotionAmount(Number(e.target.value))}
+                />
+              </label>
+              <label>
+                Loop
+                <select value={imageCycleSeconds} onChange={(e) => setImageCycleSeconds(Number(e.target.value))}>
+                  <option value={20}>20 sec</option>
+                  <option value={60}>1 min</option>
+                  <option value={120}>2 min</option>
+                  <option value={300}>5 min</option>
+                </select>
+              </label>
+              <label>
+                Framing
+                <select value={imageFit} onChange={(e) => setImageFit(e.target.value as ImageFit)}>
+                  <option value="contain">Show all</option>
+                  <option value="cover">Fill frame</option>
+                </select>
+              </label>
+              <label className="media-white-toggle">
+                <input type="checkbox" checked={fadeWhite} onChange={(e) => setFadeWhite(e.target.checked)} />
+                Fade white background
+              </label>
+            </div>
+          )}
           <div className="media-audio-controls">
             <label>
               Rhythm source
               <select value={audioMode} onChange={(e) => changeAudioMode(e.target.value as AudioMode)}>
-                <option value="video">Video soundtrack</option>
+                {media.kind === "video" && <option value="video">Video soundtrack</option>}
                 {(config?.audio.sources ?? []).some((source) => source.kind !== "video") && (
                   <optgroup label="Gate live inputs">
                     {(config?.audio.sources ?? []).map((source, index) =>
@@ -415,7 +671,7 @@ export default function Media() {
                 }}
               />
             </label>
-            {audioMode === "video" && (
+            {media.kind === "video" && audioMode === "video" && (
               <label className="media-monitor-toggle">
                 <input
                   type="checkbox"
@@ -425,7 +681,7 @@ export default function Media() {
                 Hear soundtrack here
               </label>
             )}
-            {audioMode === "video" && broadcasting && (
+            {media.kind === "video" && audioMode === "video" && broadcasting && (
               <span className={soundtrackStatus?.active ? "ok" : "hint"}>
                 {soundtrackStatus?.active
                   ? `Soundtrack live${soundtrackStatus.bpm > 0 ? ` · ${soundtrackStatus.bpm.toFixed(0)} BPM` : " · finding beat…"}`
@@ -435,14 +691,16 @@ export default function Media() {
           </div>
           <div className="media-actions">
             {!broadcasting ? (
-              <button className="primary" onClick={goLive} disabled={!connected}>Play on Gate</button>
+              <button className="primary" onClick={goLive} disabled={!connected}>
+                Play {media.kind} on Gate
+              </button>
             ) : (
-              <button className="danger" onClick={stop}>Stop Gate video</button>
+              <button className="danger" onClick={stop}>Stop Gate {media.kind}</button>
             )}
             <span className="hint">
               {broadcasting
                 ? `${sent.toLocaleString()} frames sent${dropped ? ` · ${dropped} dropped to stay live` : ""}`
-                : "Playback is local until you tap Play on Gate."}
+                : `This ${media.kind} stays local until you play it on the Gate.`}
             </span>
           </div>
         </section>
@@ -452,17 +710,19 @@ export default function Media() {
         <h2>Gate treatment</h2>
         {active?.active ? (
           <p>
-            <strong>{active.title || "Untitled video"}</strong> is coming from {active.owner_name || "a connected device"}.
+            <strong>{active.title || "Untitled visual"}</strong> is coming from {active.owner_name || "a connected device"}.
             {ownedHere ? " This device owns the live feed." : " Starting another source will take it over cleanly."}
           </p>
         ) : (
-          <p className="hint">No video frames are live. The last frame is removed immediately when its source stops or disconnects.</p>
+          <p className="hint">No media frames are live. The last frame is removed immediately when its source stops or disconnects.</p>
         )}
         <p className="hint">
           Add or edit a <strong>Video</strong> layer in Settings to shape it: Zoom, Kaleidoscope,
           Contrast, Rotation, saturation, tint/original-color mix, brightness, blend, opacity,
           speed, and audio response all remain live and composable with the other patterns. The
-          rhythm source above can be the video's own soundtrack or any configured Gate input.
+          rhythm source above can be the video's own soundtrack or any configured Gate input. For
+          still images, the animation controls keep the motion slow and intentional before the
+          layer stack adds its own treatment.
         </p>
         {active?.active && !broadcasting && (
           <button className="danger" onClick={() => client.stopVideo(true)}>Stop current source</button>
