@@ -5,9 +5,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Responsive,
+  noCompactor,
   type ResponsiveLayouts,
   useContainerWidth,
-  verticalCompactor,
 } from "react-grid-layout";
 import {
   addWidgetToDeck,
@@ -500,7 +500,7 @@ export default function Live() {
             rowHeight={48}
             margin={{ phone: [8, 8], tablet: [10, 10], desktop: [10, 10] }}
             containerPadding={{ phone: [8, 8], tablet: [10, 10], desktop: [10, 10] }}
-            compactor={verticalCompactor}
+            compactor={noCompactor}
             dragConfig={{ enabled: editing, bounded: true, handle: ".deck-drag-handle", cancel: "button,input,select" }}
             resizeConfig={{ enabled: editing, handles: ["se", "sw"] }}
             onLayoutChange={(_layout, layouts: ResponsiveLayouts<DeckBreakpoint>) => {

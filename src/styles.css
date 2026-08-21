@@ -1637,6 +1637,7 @@ button:disabled {
 /* ---- Configurable Control Decks ---- */
 
 .control-deck-page {
+  position: relative;
   display: block;
   height: auto;
   min-height: 100%;
@@ -1720,7 +1721,7 @@ button:disabled {
 
 .control-deck-shell {
   width: 100%;
-  max-width: 1480px;
+  max-width: 1680px;
   min-height: 240px;
   margin: 0 auto;
 }
@@ -1982,6 +1983,28 @@ button:disabled {
 }
 
 @media (min-width: 1180px) {
+  .control-deck-page:not(.deck-editing) .control-deck-toolbar {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    left: 12px;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    backdrop-filter: none;
+  }
+
+  .control-deck-page:not(.deck-editing) .control-deck-toolbar select,
+  .control-deck-page:not(.deck-editing) .control-deck-toolbar button {
+    background-color: rgba(18, 14, 33, 0.78);
+    backdrop-filter: blur(10px);
+  }
+
+  .control-deck-page:not(.deck-editing) .deck-device-chip {
+    display: none;
+  }
+
   .control-deck-page:not(.deck-editing) .control-widget {
     overflow: visible;
     border-color: transparent;
