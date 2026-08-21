@@ -13,6 +13,10 @@ const TABS = [
   { id: "settings", label: "Settings" },
 ] as const;
 
+const NAV_TABS: ReadonlyArray<{ id: TabId; label: string }> = import.meta.env.DEV
+  ? [...TABS, { id: "replay", label: "Archive" }]
+  : TABS;
+
 type TabId = (typeof TABS)[number]["id"] | "replay";
 
 const DevReplay = import.meta.env.DEV ? lazy(() => import("./Replay")) : null;
@@ -209,7 +213,7 @@ export default function App() {
       <header className="topbar">
         <h1>Empyrean Gate</h1>
         <nav>
-          {TABS.map((t) => (
+          {NAV_TABS.map((t) => (
             <button
               key={t.id}
               className={tab === t.id ? "active" : ""}

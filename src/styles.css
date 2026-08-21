@@ -472,6 +472,36 @@ main {
   color: #ffb3c2;
 }
 
+.replay-library {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.replay-library > button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+}
+
+.replay-library > button strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replay-library > button span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.replay-library > button span:last-child {
+  color: var(--accent2);
+}
+
 .replay-transport {
   display: flex;
   gap: 8px;

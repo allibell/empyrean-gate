@@ -34,6 +34,12 @@ interface Clip {
   frames: number;
 }
 
+interface SharedFixture {
+  name: string;
+  size: number;
+  url: string;
+}
+
 function timeLabel(seconds: number): string {
   if (!Number.isFinite(seconds)) return "0:00.0";
   const minutes = Math.floor(seconds / 60);
@@ -53,9 +59,25 @@ export default function Replay() {
   const [fps, setFps] = useState(30);
   const [frame, setFrameState] = useState(0);
   const [error, setError] = useState("");
+  const [fixtures, setFixtures] = useState<SharedFixture[]>([]);
+  const [archiveDirectory, setArchiveDirectory] = useState("");
+  const [loadingFixture, setLoadingFixture] = useState("");
   const frameRef = useRef(0);
   const requestRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/__empyrean/uprising")
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("Archive unavailable")))
+      .then((value: { directory?: string; fixtures?: SharedFixture[] }) => {
+        if (cancelled) return;
+        setFixtures(value.fixtures ?? []);
+        setArchiveDirectory(value.directory ?? "");
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   const showFrame = useCallback(async (index: number) => {
     if (!clip) return;
@@ -85,6 +107,20 @@ export default function Replay() {
     setClip({ file, frames: file.size / FRAME_BYTES });
     setPlaying(true);
   }, []);
+
+  const openSharedFixture = useCallback(async (fixture: SharedFixture) => {
+    setError("");
+    setLoadingFixture(fixture.name);
+    try {
+      const response = await fetch(fixture.url);
+      if (!response.ok) throw new Error(`Archive returned ${response.status}`);
+      openFile(new File([await response.blob()], fixture.name, { type: "application/octet-stream" }));
+    } catch (reason) {
+      setError(`Could not open ${fixture.name}: ${reason instanceof Error ? reason.message : reason}`);
+    } finally {
+      setLoadingFixture("");
+    }
+  }, [openFile]);
 
   useEffect(() => {
     if (clip) void showFrame(0);
@@ -169,6 +205,19 @@ export default function Replay() {
           <span>{clip?.file.name ?? "or drop a file here"}</span>
         </div>
 
+        {fixtures.length > 0 && (
+          <div className="replay-library">
+            <div className="eyebrow">Shared Uprising archive</div>
+            {fixtures.map((fixture) => (
+              <button key={fixture.name} onClick={() => void openSharedFixture(fixture)}>
+                <strong>{fixture.name.replace(/\.eg\.data$/i, "")}</strong>
+                <span>{(fixture.size / 1_048_576).toFixed(1)} MB</span>
+                <span>{loadingFixture === fixture.name ? "Opening…" : "Open"}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {error && <div className="replay-error">{error}</div>}
 
         {clip && (
@@ -230,7 +279,9 @@ export default function Replay() {
         <div className="replay-note">
           <strong>Fetch the local fixture</strong>
           <code>bun run demo:uprising</code>
-          <span className="hint">Then choose it from demo-data/uprising/.</span>
+          <span className="hint">
+            Saved for every worktree in {archiveDirectory || "the shared Empyrean data directory"}.
+          </span>
         </div>
       </aside>
     </div>

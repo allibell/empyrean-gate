@@ -141,9 +141,11 @@ Useful during pattern development:
   `http://localhost:9520` (or from a phone on the LAN).
 - `bun run demo:uprising` — optional convenience: use authenticated GitHub access to
   fetch the small **Warm Windstorm** clip referenced by the saved 2024 show state. It
-  lands in ignored `demo-data/uprising/`. While Vite is running, open `/#replay` to use
-  the development-only frame fixture viewer; it is omitted from production navigation
-  and builds. Other testers can choose a clip from their own `Uprising-Data` checkout.
+  lands in the shared per-user cache at
+  `${XDG_DATA_HOME:-~/.local/share}/empyrean-gate/uprising/`, so every Git worktree sees
+  the same archive. While Vite is running, open the **Archive** tab to load it in the
+  development-only frame fixture viewer; it is omitted from production builds. Override
+  the location with `EMPYREAN_UPRISING_DIR` when needed.
 - `bun scripts/e2e-test.ts` — protocol smoke test against a running backend.
   It also sends a generated video texture and verifies live source status.
 

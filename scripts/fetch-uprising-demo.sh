@@ -5,8 +5,11 @@ set -euo pipefail
 # or accidentally adding a large Git LFS object to Empyrean Gate.
 default_clip="1ad2a100-64d4-4aeb-8fbd-deeb10b1410b"
 clip_id="${1:-$default_clip}"
-root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-output_dir="$root_dir/demo-data/uprising"
+# The archive cache is deliberately outside the checkout. Git worktrees have
+# separate ignored demo-data folders, which made downloaded scenes appear to
+# vanish whenever development moved to another branch/worktree.
+shared_root="${EMPYREAN_SHARED_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/empyrean-gate}"
+output_dir="${EMPYREAN_UPRISING_DIR:-$shared_root/uprising}"
 if [[ "$clip_id" == "$default_clip" ]]; then
   output_name="Warm Windstorm.eg.data"
 else
