@@ -587,7 +587,7 @@ export default function Media() {
           <input
             type="url"
             inputMode="url"
-            placeholder="https://… video or page URL"
+            placeholder="Instagram Reel or video/page URL"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
           />
