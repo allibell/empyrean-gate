@@ -89,6 +89,15 @@ export default function Live() {
     () => decks.find((deck) => deck.id === activeDeckId) ?? decks[0] ?? defaultControlDeck(),
     [activeDeckId, decks],
   );
+  // react-grid-layout normalizes layouts in place while changing breakpoints.
+  // Give it a disposable copy so a phone/tablet visit cannot corrupt the saved
+  // desktop composition (or vice versa) when the deck is not being edited.
+  const renderedLayouts = useMemo(
+    () => structuredClone(
+      activeDeck.id === "default" ? defaultControlDeck().layouts : activeDeck.layouts,
+    ),
+    [activeDeck.id, activeDeck.layouts, breakpoint],
+  );
 
   useEffect(() => {
     saveControlDecks(decks);
@@ -420,6 +429,20 @@ export default function Live() {
     setEditing(true);
   };
 
+  const toggleEditing = () => {
+    if (editing) {
+      setEditing(false);
+      return;
+    }
+    if (activeDeck.id === "default") {
+      const duplicate = cloneControlDeck(defaultControlDeck());
+      duplicate.name = "Live · Custom";
+      setDecks((current) => [...current, duplicate]);
+      setActiveDeckId(duplicate.id);
+    }
+    setEditing(true);
+  };
+
   const deleteDeck = () => {
     if (decks.length <= 1 || !window.confirm(`Delete “${activeDeck.name}”?`)) return;
     const remaining = decks.filter((deck) => deck.id !== activeDeck.id);
@@ -440,7 +463,7 @@ export default function Live() {
         <span className="spacer" />
         <button
           className={editing ? "primary" : ""}
-          onClick={() => setEditing((value) => !value)}
+          onClick={toggleEditing}
           aria-pressed={editing}
         >
           {editing ? "✓ Done" : "✦ Edit deck"}
@@ -494,7 +517,7 @@ export default function Live() {
         {deckMounted && (
           <Responsive<DeckBreakpoint>
             width={deckWidth}
-            layouts={activeDeck.layouts}
+            layouts={renderedLayouts}
             breakpoints={DECK_BREAKPOINTS}
             cols={DECK_COLUMNS}
             rowHeight={48}

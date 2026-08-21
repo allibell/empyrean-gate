@@ -26,7 +26,7 @@ export interface ControlDeck {
   layouts: ResponsiveLayouts<DeckBreakpoint>;
 }
 
-const DECK_SCHEMA_VERSION = 5;
+const DECK_SCHEMA_VERSION = 7;
 
 export const DECK_BREAKPOINTS: Record<DeckBreakpoint, number> = {
   desktop: 1180,
@@ -107,13 +107,13 @@ export function defaultControlDeck(): ControlDeck {
         item("master", 0, 11, 8, 2, 2, 2),
       ],
       desktop: [
-        item("tools", 0, 3, 2, 5, 2, 2),
-        item("effects", 0, 8, 2, 2, 2, 1),
-        item("preview", 2, 0, 8, 14, 4, 6),
-        item("colors", 10, 2, 2, 3, 2, 1),
-        item("size", 10, 5, 2, 1, 2, 1),
-        item("tempo", 10, 6, 2, 3, 2, 2),
-        item("master", 10, 9, 2, 2, 2, 2),
+        item("tools", 0, 4, 1, 5, 1, 2),
+        item("effects", 0, 9, 1, 2, 1, 1),
+        item("preview", 1, 0, 10, 16, 6, 8),
+        item("colors", 11, 3, 1, 3, 1, 1),
+        item("size", 11, 6, 1, 1, 1, 1),
+        item("tempo", 11, 7, 1, 3, 1, 2),
+        item("master", 11, 10, 1, 2, 1, 2),
       ],
     },
   };

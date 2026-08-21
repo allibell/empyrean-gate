@@ -274,14 +274,18 @@ main {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  width: min(29cqw, 220px);
+  gap: clamp(2px, 0.7cqw, 6px);
   pointer-events: none;
   text-align: center;
 }
 
 .ring-title {
-  font-size: 13px;
-  letter-spacing: 0.18em;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: clamp(7px, 1.45cqw, 13px);
+  letter-spacing: clamp(0.08em, 0.22cqw, 0.18em);
+  white-space: nowrap;
   text-transform: uppercase;
   background: linear-gradient(90deg, var(--accent), var(--accent2));
   -webkit-background-clip: text;
@@ -293,9 +297,35 @@ main {
 .ring-status {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: clamp(3px, 0.8cqw, 8px);
   color: var(--muted);
-  font-size: 12px;
+  font-size: clamp(8px, 1.35cqw, 12px);
+}
+
+.ring-center .beat-dot {
+  width: clamp(8px, 1.55cqw, 14px);
+  height: clamp(8px, 1.55cqw, 14px);
+  flex: 0 0 auto;
+}
+
+.ring-center .sparkbars {
+  width: 100%;
+  justify-content: center;
+  gap: clamp(3px, 0.7cqw, 6px);
+}
+
+.ring-center .sparkbars svg {
+  width: clamp(42px, 11cqw, 90px);
+  height: auto;
+  flex: 0 1 auto;
+}
+
+.ring-center .spark-value {
+  font-size: clamp(8px, 1.4cqw, 13px);
+}
+
+.ring-center .spark-label {
+  font-size: clamp(7px, 1.15cqw, 11px);
 }
 
 .tempo-time-grid {
@@ -1721,7 +1751,7 @@ button:disabled {
 
 .control-deck-shell {
   width: 100%;
-  max-width: 1680px;
+  max-width: 1780px;
   min-height: 240px;
   margin: 0 auto;
 }
@@ -2023,6 +2053,49 @@ button:disabled {
 
   .control-deck-page:not(.deck-editing) .control-widget-preview {
     background: radial-gradient(circle at center, rgba(37, 26, 63, 0.16), transparent 68%);
+  }
+
+  .control-deck-page:not(.deck-editing) .control-widget-tools .cluster.pens {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: 52px;
+    align-content: center;
+  }
+
+  .control-deck-page:not(.deck-editing) .control-widget-tools .pen-btn {
+    min-height: 0;
+    height: 52px;
+    padding: 4px 2px;
+    gap: 1px;
+    font-size: 11px;
+  }
+
+  .control-deck-page:not(.deck-editing) .control-widget-tools .tool-icon {
+    width: 21px;
+    height: 21px;
+  }
+
+  .control-deck-page:not(.deck-editing) .control-widget-effects .cluster.effects {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: 38px;
+    align-content: center;
+  }
+
+  .control-deck-page:not(.deck-editing) .control-widget-effects .effect-btn {
+    min-height: 0;
+    height: 38px;
+    padding: 4px 2px;
+    font-size: 11px;
+  }
+
+  .control-deck-page:not(.deck-editing) .control-widget-colors .cluster.swatches {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: 36px;
+    align-content: center;
+  }
+
+  .control-deck-page:not(.deck-editing) .control-widget-colors .swatch {
+    min-height: 0;
+    height: 36px;
   }
 }
 
@@ -2353,11 +2426,29 @@ button:disabled {
   }
 
   .ring-title {
-    font-size: 11px;
+    font-size: clamp(7px, 2vw, 9px);
+    letter-spacing: 0.1em;
   }
 
   .ring-status {
-    font-size: 11px;
+    font-size: clamp(7px, 2vw, 9px);
+  }
+
+  .ring-center {
+    width: min(25cqw, 105px);
+    gap: 2px;
+  }
+
+  .ring-center .sparkbars svg {
+    width: clamp(38px, 10cqw, 52px);
+  }
+
+  .ring-center .spark-value {
+    font-size: 8px;
+  }
+
+  .ring-center .spark-label {
+    display: none;
   }
 
   .settings-page,
