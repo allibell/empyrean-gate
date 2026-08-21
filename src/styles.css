@@ -1401,6 +1401,46 @@ button:disabled {
   font-size: 10px;
 }
 
+.media-bundled-images {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.media-bundled-images > span {
+  display: flex;
+  align-items: center;
+  padding-right: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  grid-column: 1 / -1;
+}
+
+.media-bundled-images button {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.media-bundled-images button.active {
+  border-color: #4dc9c2;
+  background: rgba(77, 201, 194, 0.12);
+  color: var(--text);
+}
+
+.media-bundled-images small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
 .media-file-button:hover {
   color: var(--text);
   border-color: var(--accent);

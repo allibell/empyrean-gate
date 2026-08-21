@@ -32,6 +32,29 @@ const IMAGE_MOTIONS: ReadonlyArray<{ value: ImageMotion; label: string }> = [
   { value: "still", label: "Still" },
 ];
 
+const BUNDLED_IMAGES = [
+  {
+    playbackUrl: "/media/axis-mundi-gate-scene.png",
+    title: "Axis Mundi · Full Gate scene",
+    label: "Axis Mundi scene",
+    description: "Cosmic tree + radial titles",
+    motion: "ambient" as ImageMotion,
+    intensity: 0.5,
+    seconds: 120,
+    fit: "contain" as ImageFit,
+  },
+  {
+    playbackUrl: "/media/axis-mundi-tree-gate.png",
+    title: "Axis Mundi · Tree emblem",
+    label: "Axis Mundi tree",
+    description: "Transparent radial tree mark",
+    motion: "breathe" as ImageMotion,
+    intensity: 0.65,
+    seconds: 60,
+    fit: "contain" as ImageFit,
+  },
+] as const;
+
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const smooth = (value: number) => {
   const t = clamp01(value);
@@ -52,6 +75,20 @@ function fadeWhitePixels(ctx: CanvasRenderingContext2D, size: number): void {
     pixels[index + 3] = Math.round(pixels[index + 3] * (1 - white));
   }
   ctx.putImageData(frame, 0, 0);
+}
+
+function imageHasTransparency(image: HTMLImageElement): boolean {
+  const sample = document.createElement("canvas");
+  sample.width = 64;
+  sample.height = 64;
+  const ctx = sample.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return false;
+  ctx.drawImage(image, 0, 0, sample.width, sample.height);
+  const pixels = ctx.getImageData(0, 0, sample.width, sample.height).data;
+  for (let index = 3; index < pixels.length; index += 4) {
+    if (pixels[index] < 250) return true;
+  }
+  return false;
 }
 
 function drawAnimatedImage(
@@ -312,6 +349,23 @@ export default function Media() {
     });
   };
 
+  const loadBundledImage = (image: (typeof BUNDLED_IMAGES)[number]) => {
+    replaceMedia({
+      playbackUrl: image.playbackUrl,
+      title: image.title,
+      sourceUrl: `bundled artwork: ${image.playbackUrl}`,
+      resolvedBy: "Gate artwork",
+      kind: "image",
+    });
+    setFadeWhite(false);
+    setImageMotion(image.motion);
+    setImageMotionAmount(image.intensity);
+    setImageCycleSeconds(image.seconds);
+    setImageFit(image.fit);
+    setTextureSize(128);
+    setTransportFps(15);
+  };
+
   const goLive = () => {
     const video = videoRef.current;
     const image = imageRef.current;
@@ -544,6 +598,21 @@ export default function Media() {
             <input type="file" accept="video/*" onChange={(e) => loadFile(e.target.files?.[0])} />
           </label>
         </div>
+        <div className="media-bundled-images" aria-label="Saved media scenes">
+          <span>Saved media scenes</span>
+          {BUNDLED_IMAGES.map((image) => (
+            <button
+              type="button"
+              key={image.playbackUrl}
+              className={media?.playbackUrl === image.playbackUrl ? "active" : undefined}
+              aria-pressed={media?.playbackUrl === image.playbackUrl}
+              onClick={() => loadBundledImage(image)}
+            >
+              <strong>{image.label}</strong>
+              <small>{image.description}</small>
+            </button>
+          ))}
+        </div>
         {error && <p className="media-error">{error}</p>}
       </section>
 
@@ -568,7 +637,14 @@ export default function Media() {
                 key={media.playbackUrl}
                 src={media.playbackUrl}
                 alt={media.title}
-                onLoad={() => setError(null)}
+                onLoad={(event) => {
+                  setError(null);
+                  setFadeWhite(
+                    media.resolvedBy === "Gate artwork"
+                      ? false
+                      : !imageHasTransparency(event.currentTarget),
+                  );
+                }}
                 onError={() => setError("This browser could not decode that image. Try PNG, JPEG, or WebP.")}
               />
             )}
