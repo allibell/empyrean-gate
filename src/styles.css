@@ -1517,6 +1517,406 @@ button:disabled {
   }
 }
 
+/* ---- Configurable Control Decks ---- */
+
+.control-deck-page {
+  display: block;
+  height: auto;
+  min-height: 100%;
+  padding: 0;
+}
+
+.control-deck-toolbar,
+.control-deck-editorbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.control-deck-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  min-height: 48px;
+  padding: 7px 10px;
+  border-bottom: 1px solid #2a2445;
+  background: rgba(10, 8, 20, 0.92);
+  backdrop-filter: blur(14px);
+}
+
+.control-deck-toolbar label {
+  min-width: 0;
+}
+
+.control-deck-toolbar select {
+  max-width: min(44vw, 280px);
+  min-height: 34px;
+  font-weight: 650;
+}
+
+.deck-device-chip {
+  padding: 4px 8px;
+  border: 1px solid #332a55;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.control-deck-editorbar {
+  position: sticky;
+  top: 48px;
+  z-index: 29;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border-bottom: 1px solid #3f326b;
+  background: rgba(26, 21, 48, 0.96);
+  box-shadow: 0 8px 24px rgba(3, 2, 10, 0.3);
+}
+
+.control-deck-editorbar > input {
+  min-width: 150px;
+  flex: 1 1 180px;
+}
+
+.deck-add-control {
+  display: flex;
+  min-width: 0;
+}
+
+.deck-add-control select {
+  min-width: 0;
+  max-width: 180px;
+  border-radius: 8px 0 0 8px;
+}
+
+.deck-add-control button {
+  border-radius: 0 8px 8px 0;
+}
+
+.deck-edit-hint {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.control-deck-shell {
+  width: 100%;
+  min-height: 240px;
+}
+
+.control-deck-shell > .react-grid-layout {
+  min-height: calc(100dvh - 110px);
+  transition: height 180ms ease;
+}
+
+.deck-editing .control-deck-shell > .react-grid-layout {
+  background-image:
+    linear-gradient(rgba(124, 92, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124, 92, 255, 0.06) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.control-widget {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #2a2445;
+  border-radius: 12px;
+  background-color: rgba(20, 16, 36, 0.76);
+  background-image: var(--surface-grad);
+  box-shadow: 0 8px 24px rgba(3, 2, 10, 0.16);
+}
+
+.deck-editing .control-widget {
+  border-color: #6550ad;
+  box-shadow: 0 0 0 1px rgba(124, 92, 255, 0.2), 0 10px 28px rgba(3, 2, 10, 0.32);
+}
+
+.control-widget-preview {
+  container-type: size;
+  background: rgba(7, 6, 15, 0.42);
+}
+
+.control-widget-body {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.control-widget-preview .control-widget-body {
+  padding: 0;
+  overflow: hidden;
+}
+
+.deck-editing .control-widget-body {
+  height: calc(100% - 38px);
+  pointer-events: none;
+  opacity: 0.72;
+}
+
+.deck-drag-handle {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 6px 5px 10px;
+  color: #c9c1f7;
+  background: rgba(45, 35, 78, 0.94);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.deck-drag-handle:active {
+  cursor: grabbing;
+}
+
+.deck-drag-handle > span {
+  color: var(--accent2);
+  font-size: 18px;
+}
+
+.deck-drag-handle strong {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.deck-drag-handle button {
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.control-deck-shell .react-grid-item.react-grid-placeholder {
+  border: 1px solid var(--accent2);
+  border-radius: 12px;
+  background: rgba(56, 209, 194, 0.22);
+  opacity: 1;
+}
+
+.control-deck-shell .react-resizable-handle {
+  z-index: 4;
+  width: 32px;
+  height: 32px;
+  touch-action: none;
+}
+
+.control-deck-shell .react-resizable-handle::after {
+  width: 10px;
+  height: 10px;
+  border-color: var(--accent2);
+  border-width: 0 3px 3px 0;
+}
+
+.deck-preview-wrap {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.deck-preview-wrap .gate-canvas {
+  width: min(100%, 100cqh);
+  height: min(100%, 100cqw);
+  max-height: 100%;
+}
+
+.control-widget-tools .cluster.pens,
+.control-widget-effects .cluster.effects,
+.control-widget-colors .cluster.swatches {
+  height: 100%;
+  display: grid;
+  align-content: stretch;
+  gap: 6px;
+}
+
+.control-widget-tools .cluster.pens {
+  grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+}
+
+.control-widget-tools .pen-btn {
+  min-width: 0;
+  min-height: 52px;
+}
+
+.control-widget-effects .cluster.effects {
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+}
+
+.control-widget-effects .effect-btn {
+  min-width: 0;
+  min-height: 44px;
+}
+
+.control-widget-colors .cluster.swatches {
+  grid-template-columns: repeat(auto-fit, minmax(30px, 1fr));
+}
+
+.control-widget-colors .swatch {
+  width: 100%;
+  height: 100%;
+  min-width: 26px;
+  min-height: 28px;
+}
+
+.control-widget-tempo .tempo-menu,
+.control-widget-size .size-ctl,
+.deck-master-controls {
+  height: 100%;
+}
+
+.control-widget-tempo .tempo-menu,
+.deck-master-controls {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+
+.deck-master-controls .slider-row {
+  min-height: 40px;
+}
+
+.deck-layer-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+}
+
+.deck-layer-list button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 42px;
+  text-align: left;
+  color: var(--muted);
+}
+
+.deck-layer-list button > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deck-layer-list button.active {
+  color: var(--text);
+  border-color: var(--accent2);
+  background: rgba(56, 209, 194, 0.1);
+}
+
+.deck-layer-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #403858;
+}
+
+.deck-layer-list button.active .deck-layer-dot {
+  background: var(--accent2);
+  box-shadow: 0 0 8px rgba(56, 209, 194, 0.7);
+}
+
+.deck-status-grid {
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.deck-status-grid > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 7px;
+  border-radius: 8px;
+  background: rgba(7, 6, 15, 0.54);
+}
+
+.deck-status-grid strong {
+  color: var(--accent2);
+  font-size: 18px;
+}
+
+.deck-status-grid span {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+@media (max-width: 700px) {
+  .control-deck-page {
+    display: block;
+    padding: 0 0 calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .control-deck-toolbar {
+    min-height: 46px;
+    padding: 6px 8px;
+  }
+
+  .control-deck-toolbar button,
+  .control-deck-editorbar button,
+  .control-deck-editorbar select,
+  .control-deck-editorbar input {
+    min-height: 40px;
+  }
+
+  .control-deck-toolbar select {
+    max-width: 48vw;
+    font-size: 14px;
+  }
+
+  .control-deck-editorbar {
+    top: 46px;
+    padding: 7px 8px;
+  }
+
+  .deck-device-chip,
+  .deck-edit-hint {
+    display: none;
+  }
+
+  .control-widget-body {
+    padding: 7px;
+  }
+
+  .control-widget-preview .control-widget-body {
+    padding: 0;
+  }
+
+  .control-widget-tools .pen-btn {
+    min-height: 48px;
+  }
+
+  .control-widget-tools .tool-icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .deck-master-controls .slider-row > span:not(.slider-val) {
+    width: 72px;
+  }
+}
+
 .add-row {
   display: flex;
   gap: 8px;
@@ -1899,5 +2299,21 @@ button:disabled {
   .qr {
     width: min(280px, calc(100vw - 52px));
     height: min(280px, calc(100vw - 52px));
+  }
+}
+
+@media (max-width: 700px) {
+  .live-page.control-deck-page {
+    display: block;
+    height: auto;
+    padding: 0 0 calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .control-widget-preview .deck-preview-wrap {
+    order: initial;
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    aspect-ratio: auto;
   }
 }
