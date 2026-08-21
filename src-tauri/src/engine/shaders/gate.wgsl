@@ -74,6 +74,10 @@ struct Effect {
     radius: f32,
     intensity: f32,
     hue: f32,
+    saturation: f32,
+    brightness: f32,
+    _pad0: f32,
+    _pad1: f32,
 }
 
 struct Dab {
@@ -85,6 +89,10 @@ struct Dab {
     size: f32,
     intensity: f32,
     dir: f32,     // stroke motion direction, for directional pens
+    saturation: f32,
+    brightness: f32,
+    _pad0: f32,
+    _pad1: f32,
 }
 
 @group(0) @binding(0) var<uniform> G: Globals;
@@ -584,7 +592,7 @@ fn effect_color(E: Effect, ctx: Ctx) -> vec3f {
     if E.hue < 0.0 {
         col = vec3f(1.0);
     } else {
-        col = hsv2rgb(E.hue, 0.85, 1.0);
+        col = hsv2rgb(E.hue, E.saturation, E.brightness);
     }
 
     switch E.kind {
@@ -634,7 +642,7 @@ fn dab_color(D: Dab, ctx: Ctx, dab_index: u32) -> vec3f {
     if D.hue < 0.0 {
         col = vec3f(1.0);
     } else {
-        col = hsv2rgb(D.hue, 0.85, 1.0);
+        col = hsv2rgb(D.hue, D.saturation, D.brightness);
     }
 
     switch D.kind {

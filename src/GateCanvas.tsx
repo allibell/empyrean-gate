@@ -127,6 +127,8 @@ export interface GatePreviewSource {
 export interface DrawPen {
   pen: PenKind;
   hue: number; // turns; -1 = white
+  saturation: number;
+  brightness: number;
   size: number;
   intensity: number;
 }
@@ -230,6 +232,8 @@ export default function GateCanvas({
         pen: pen.pen,
         points: pending.current,
         hue: pen.hue,
+        saturation: pen.saturation,
+        brightness: pen.brightness,
         size: pen.size,
         intensity: pen.intensity,
       });

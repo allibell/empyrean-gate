@@ -218,6 +218,9 @@ pub struct EffectCfg {
     pub size: f32,
     /// Hue in turns; negative = white.
     pub hue: f32,
+    /// HSV saturation and value. Kept separate so custom RGB colors round-trip.
+    pub saturation: f32,
+    pub brightness: f32,
     /// Seconds; 0 = use the kind's default.
     pub duration: f32,
 }
@@ -231,6 +234,8 @@ impl Default for EffectCfg {
             intensity: 1.0,
             size: 1.0,
             hue: -1.0,
+            saturation: 0.85,
+            brightness: 1.0,
             duration: 0.0,
         }
     }
@@ -334,6 +339,9 @@ pub struct GpuDab {
     pub intensity: f32,
     /// Stroke motion direction (radians) for directional pens.
     pub dir: f32,
+    pub saturation: f32,
+    pub brightness: f32,
+    pub _pad: [f32; 2],
 }
 
 #[repr(C)]
@@ -347,6 +355,9 @@ pub struct GpuEffect {
     pub radius: f32,
     pub intensity: f32,
     pub hue: f32,
+    pub saturation: f32,
+    pub brightness: f32,
+    pub _pad: [f32; 2],
 }
 
 impl LayerCfg {

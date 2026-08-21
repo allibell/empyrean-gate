@@ -2264,6 +2264,115 @@ button:disabled {
   min-height: 28px;
 }
 
+.custom-color-button {
+  display: grid;
+  place-items: center;
+  color: white;
+  font-size: 22px;
+  font-weight: 700;
+  text-shadow: 0 1px 4px #000;
+  background: conic-gradient(#ff334d, #ffd633, #35e878, #33dbea, #4d70ff, #b04dff, #ff4da0, #ff334d);
+}
+
+.custom-color-backdrop {
+  z-index: 120;
+}
+
+.custom-color-picker {
+  width: min(480px, calc(100vw - 24px));
+}
+
+.custom-color-title-row,
+.custom-color-actions,
+.custom-color-wheel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.custom-color-title-row > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.custom-color-title-row h2,
+.custom-color-title-row p {
+  margin: 0;
+}
+
+.custom-color-title-row > button {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  font-size: 22px;
+}
+
+.custom-color-wheel {
+  margin: 18px 0;
+  padding: 12px;
+  border: 1px solid #3b3060;
+  border-radius: 12px;
+  background: rgba(8, 7, 16, 0.46);
+  cursor: pointer;
+}
+
+.custom-color-wheel input[type="color"] {
+  width: 78px;
+  height: 78px;
+  flex: 0 0 auto;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.custom-color-wheel span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.custom-color-wheel strong {
+  font-size: 18px;
+  letter-spacing: 0.06em;
+}
+
+.custom-color-wheel small,
+.saved-custom-colors > span {
+  color: var(--muted);
+}
+
+.saved-custom-colors > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.saved-custom-color {
+  position: relative;
+}
+
+.saved-custom-color .swatch {
+  width: 44px;
+  height: 38px;
+}
+
+.saved-custom-color > button:last-child {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  line-height: 1;
+}
+
+.custom-color-actions {
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
 .control-widget-tempo .tempo-menu,
 .control-widget-size .size-ctl,
 .deck-master-controls {
@@ -2351,6 +2460,112 @@ button:disabled {
   color: var(--muted);
   font-size: 10px;
   text-transform: uppercase;
+}
+
+.quick-settings-grid {
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 7px;
+}
+
+.quick-setting-button,
+.quick-setting-empty {
+  min-width: 0;
+  min-height: 54px;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.quick-setting-button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  text-align: left;
+  border-color: #544286;
+  background: linear-gradient(145deg, rgba(72, 53, 119, 0.36), rgba(25, 20, 44, 0.9));
+}
+
+.quick-setting-button:active {
+  border-color: var(--accent2);
+  background: rgba(56, 209, 194, 0.16);
+  transform: translateY(1px);
+}
+
+.quick-setting-button strong {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.quick-setting-button span {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.quick-settings-backdrop {
+  z-index: 120;
+}
+
+.quick-settings-editor {
+  width: min(520px, calc(100vw - 24px));
+  max-height: min(720px, calc(100dvh - 24px));
+  overflow: auto;
+}
+
+.quick-settings-editor-title,
+.quick-settings-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quick-settings-editor-title {
+  margin-bottom: 14px;
+}
+
+.quick-settings-editor-title > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.quick-settings-editor-title h2,
+.quick-settings-editor-title p {
+  margin: 0;
+}
+
+.quick-settings-editor-title > button {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  font-size: 22px;
+}
+
+.quick-settings-editor .field-row {
+  align-items: center;
+  margin: 9px 0;
+}
+
+.quick-settings-editor .field-row > span {
+  width: 145px;
+}
+
+.quick-settings-editor .field-row > input,
+.quick-settings-editor .field-row > select {
+  min-width: 0;
+  flex: 1;
+}
+
+.quick-settings-editor-actions {
+  margin-top: 18px;
 }
 
 @media (min-width: 1180px) {
@@ -2523,6 +2738,15 @@ button:disabled {
 
   .deck-master-controls .slider-row > span:not(.slider-val) {
     width: 72px;
+  }
+
+  .quick-settings-editor .field-row {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .quick-settings-editor .field-row > span {
+    width: auto;
   }
 }
 
