@@ -2052,6 +2052,13 @@ button:disabled {
   }
 
   .control-deck-page:not(.deck-editing) .control-widget-preview {
+    background: transparent;
+  }
+
+  .control-deck-page:not(.deck-editing) .control-widget-preview .control-widget-body {
+    width: min(100%, 1000px);
+    margin-inline: auto;
+    border-radius: 12px;
     background: radial-gradient(circle at center, rgba(37, 26, 63, 0.16), transparent 68%);
   }
 
@@ -2096,6 +2103,26 @@ button:disabled {
   .control-deck-page:not(.deck-editing) .control-widget-colors .swatch {
     min-height: 0;
     height: 36px;
+  }
+
+  .control-deck-page:not(.deck-editing) .deck-master-controls .slider-row,
+  .control-deck-page:not(.deck-editing) .control-widget-size .slider-row {
+    gap: 6px;
+  }
+
+  .control-deck-page:not(.deck-editing) .deck-master-controls .slider-row > span:not(.slider-val) {
+    width: 52px;
+    font-size: 10px;
+  }
+
+  .control-deck-page:not(.deck-editing) .deck-master-controls .slider-val {
+    width: 30px;
+    font-size: 10px;
+  }
+
+  .control-deck-page:not(.deck-editing) .control-widget-size .slider-row > span:not(.slider-val) {
+    width: 30px;
+    font-size: 10px;
   }
 }
 
