@@ -290,6 +290,7 @@ export interface RuntimeStatus {
   sacn_enabled: boolean;
   sacn_universes: number;
   sacn_pps: number;
+  sacn_error: string | null;
   fps_history: number[];
   pps_history: number[];
   clients: number;

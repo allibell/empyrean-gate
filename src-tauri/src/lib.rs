@@ -9,6 +9,7 @@ pub mod engine;
 pub mod geometry;
 pub mod layers;
 pub mod media;
+pub mod power;
 pub mod protocol;
 pub mod rhythm;
 pub mod sacn;
@@ -50,6 +51,7 @@ pub fn start_backend() -> Backend {
     let remote_chains = audio::spawn(state.clone());
     rhythm::spawn(state.clone());
     engine::spawn(state.clone());
+    power::spawn(state.clone());
 
     if takeover {
         // Two-phase takeover. Phase 1 (old instance keeps sending): fetch its

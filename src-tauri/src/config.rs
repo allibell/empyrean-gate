@@ -649,6 +649,10 @@ pub fn config_path() -> PathBuf {
 
 pub fn load() -> AppConfig {
     let path = config_path();
+    let bak = path.with_extension("json.bak");
+    // A broken main config falls back to the .bak kept by `save` — losing the
+    // config wouldn't just reset the show, it would regenerate the sACN CID.
+    let mut recovered = false;
     let mut cfg = match std::fs::read_to_string(&path) {
         Ok(text) => match serde_json::from_str(&text) {
             Ok(cfg) => {
@@ -656,10 +660,19 @@ pub fn load() -> AppConfig {
                 cfg
             }
             Err(e) => {
-                log::error!("config at {} is invalid ({e}); using defaults", path.display());
-                AppConfig::default()
+                log::error!("config at {} is invalid ({e}); trying backup", path.display());
+                recovered = true;
+                load_backup(&bak)
             }
         },
+        Err(_) if bak.exists() => {
+            // Main missing but a backup exists: a save was interrupted between
+            // renames, or the file was deleted. Either way the backup is newer
+            // than "defaults".
+            log::warn!("no config at {}; trying backup", path.display());
+            recovered = true;
+            load_backup(&bak)
+        }
         Err(_) => {
             log::info!("no config at {}; using defaults", path.display());
             AppConfig::default()
@@ -667,7 +680,7 @@ pub fn load() -> AppConfig {
     };
     // First-run identities. Both must be written back immediately: the sACN CID in
     // particular is only useful if it is the SAME one next launch.
-    let mut dirty = false;
+    let mut dirty = recovered; // rewrite a good main config after any fallback
     if cfg.server.join_token.is_empty() {
         cfg.server.join_token = generate_token();
         dirty = true;
@@ -691,18 +704,55 @@ pub fn load() -> AppConfig {
     cfg
 }
 
+fn load_backup(bak: &std::path::Path) -> AppConfig {
+    let parsed = std::fs::read_to_string(bak)
+        .map_err(|e| e.to_string())
+        .and_then(|t| serde_json::from_str(&t).map_err(|e| e.to_string()));
+    match parsed {
+        Ok(cfg) => {
+            log::warn!("recovered config from backup {}", bak.display());
+            cfg
+        }
+        Err(e) => {
+            log::error!("backup {} unusable ({e}); using defaults", bak.display());
+            AppConfig::default()
+        }
+    }
+}
+
 pub fn save(cfg: &AppConfig) {
     let path = config_path();
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    match serde_json::to_string_pretty(cfg) {
-        Ok(text) => {
-            if let Err(e) = std::fs::write(&path, text) {
-                log::error!("failed to save config to {}: {e}", path.display());
-            }
+    let text = match serde_json::to_string_pretty(cfg) {
+        Ok(text) => text,
+        Err(e) => {
+            log::error!("failed to serialize config: {e}");
+            return;
         }
-        Err(e) => log::error!("failed to serialize config: {e}"),
+    };
+    // Crash-safe write: a plain overwrite truncates first, so a power cut
+    // mid-save destroys the config (and with it the persistent sACN CID).
+    // Instead: write + fsync a temp file, keep the previous config as .bak,
+    // then rename into place — at every instant either the old file, the
+    // backup, or the new file is intact, and `load` knows to try the .bak.
+    let tmp = path.with_extension("json.tmp");
+    let bak = path.with_extension("json.bak");
+    let result = (|| -> std::io::Result<()> {
+        use std::io::Write;
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(text.as_bytes())?;
+        f.sync_all()?;
+        drop(f);
+        if path.exists() {
+            let _ = std::fs::remove_file(&bak); // Windows: rename won't overwrite
+            std::fs::rename(&path, &bak)?;
+        }
+        std::fs::rename(&tmp, &path)
+    })();
+    if let Err(e) = result {
+        log::error!("failed to save config to {}: {e}", path.display());
     }
 }
 

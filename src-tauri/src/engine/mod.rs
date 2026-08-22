@@ -782,6 +782,7 @@ fn run_frames(state: &Arc<SharedState>, engine: &mut Engine) {
         Ok(s) => Some(s),
         Err(e) => {
             log::error!("sACN socket unavailable: {e}");
+            state.status.lock().sacn_error = Some(format!("sACN socket unavailable: {e}"));
             None
         }
     };
@@ -870,7 +871,9 @@ fn run_frames(state: &Arc<SharedState>, engine: &mut Engine) {
                 engine.ensure_capacity(cfg.geometry.pixel_count() as u32);
                 if let Some(s) = sacn.as_mut() {
                     s.configure(&cfg.geometry, &cfg.output);
-                    state.status.lock().sacn_universes = s.universe_count();
+                    let mut st = state.status.lock();
+                    st.sacn_universes = s.universe_count();
+                    st.sacn_error = s.bind_error.clone();
                 }
             }
         }

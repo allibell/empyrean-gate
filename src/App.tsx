@@ -255,6 +255,11 @@ export default function App() {
           {e} <span className="hint">(click to dismiss)</span>
         </div>
       ))}
+      {status?.sacn_error && (
+        <div className="banner warn">
+          <strong>sACN output:</strong> {status.sacn_error}
+        </div>
+      )}
       {status?.firewall_pending && (
         <div className="banner warn">
           Windows Firewall hasn't been authorized — phones and iPads on the LAN

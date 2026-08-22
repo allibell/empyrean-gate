@@ -77,6 +77,10 @@ struct UniversePlan {
 pub struct SacnSender {
     socket: UdpSocket,
     bound_interface: String,
+    /// Set when binding the configured interface failed (e.g. the saved IP
+    /// belongs to another network). Sending continues on the previous socket,
+    /// which may be the wrong NIC — the UI must surface this, not just the log.
+    pub bind_error: Option<String>,
     cid: [u8; 16],
     source_name: [u8; 64],
     plan: Vec<UniversePlan>,
@@ -111,6 +115,7 @@ impl SacnSender {
         Ok(Self {
             socket: make_socket("")?,
             bound_interface: String::new(),
+            bind_error: None,
             cid: [0; 16],
             source_name: [0; 64],
             plan: Vec::new(),
@@ -210,13 +215,24 @@ impl SacnSender {
                 Ok(s) => {
                     self.socket = s;
                     self.bound_interface = out.interface.clone();
+                    self.bind_error = None;
                     log::info!(
                         "sACN socket bound to interface '{}'",
                         if out.interface.is_empty() { "default" } else { &out.interface }
                     );
                 }
-                Err(e) => log::error!("sACN: cannot bind interface '{}': {e}", out.interface),
+                Err(e) => {
+                    let msg = format!(
+                        "cannot bind interface '{}' ({e}) — sending via the default \
+                         interface instead; re-pick the sACN interface in Settings",
+                        out.interface
+                    );
+                    log::error!("sACN: {msg}");
+                    self.bind_error = Some(msg);
+                }
             }
+        } else {
+            self.bind_error = None;
         }
 
         self.cid = cid;

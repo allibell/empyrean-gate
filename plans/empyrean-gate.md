@@ -374,6 +374,38 @@ audit found the identity/lifecycle half of E1.31 was unimplemented.
       build. Collaborator branch `codex/production-show-control` appeared on
       origin (not yet reviewed/merged).
 
+## Round 12 (2026-08-21): field-gotcha hardening (user asked "what else is like the firewall issue?")
+
+- [x] **Keep-awake** (a2a848b): `power.rs` calls SetThreadExecutionState every 30 s.
+      System sleep blocked while running; display sleep blocked only while sACN
+      output is enabled (display sleep kills HDMI/DP display-audio loopback devices
+      — observed live). Verified via `powercfg /requests`.
+- [x] **Crash-safe config saves** (57e5b09): write+fsync temp → keep `.bak` → rename.
+      `load()` falls back to `.bak` and rewrites a good main. Before this, a power
+      cut mid-save reset the show AND regenerated the sACN CID. Verified end-to-end
+      (corrupted main config; CID survived).
+- [x] **sACN bind failures surfaced** (a500fa6): `status.sacn_error` + App warning
+      banner. Saved interface is an IP; on a different network the bind failed
+      silently and multicast left the default-route NIC while pps looked healthy.
+- [x] Already resilient (checked, no change needed): GPU device-loss/render errors
+      drop back to engine re-init with 5 s retry; updater downloads are atomic
+      (tmp + rename); audio devices wait-don't-switch; firewall rule is port-scoped.
+
+**Ops checklist for the show machine (not fixable in code):**
+- Windows Update: set Active Hours / pause updates for the event window (forced
+  reboot mid-show is the failure mode).
+- Put the exe in a user-writable folder (NOT Program Files) or self-update writes
+  will fail; failures do surface in update_state, but only at update time.
+- First manual download of the exe trips SmartScreen once ("More info → Run
+  anyway") — unsigned binary. Self-updates do NOT retrigger it.
+- NIC power management: untick "allow the computer to turn off this device" on
+  the show NIC (mostly matters for USB/WiFi adapters).
+- Validate Vulkan on the show machine's GPU early (the wgpu-29 pin exists because
+  of THIS dev machine's 2022 Intel driver; other hardware may differ).
+- No autostart-on-boot yet: if the venue power-cycles, someone must launch the
+  app (or we add a "Launch at startup" toggle — Startup-folder shortcut, no
+  admin needed — as a follow-up).
+
 ## Next session pickup
 
 - Run `bun tauri dev` and eyeball the actual patterns; tune defaults.

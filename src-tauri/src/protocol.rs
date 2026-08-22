@@ -320,6 +320,9 @@ pub struct RuntimeStatus {
     /// sACN packets actually sent per second — the "is it transmitting" truth.
     /// (Last full one-second bucket.)
     pub sacn_pps: u32,
+    /// Output-path problem the operator must see (interface bind failed, socket
+    /// unavailable). Packets may still flow — via the WRONG network interface.
+    pub sacn_error: Option<String>,
     /// Frames rendered in each of the last ~30 one-second buckets (oldest first).
     pub fps_history: Vec<u32>,
     /// sACN packets sent in each of the last ~30 one-second buckets (oldest first).
