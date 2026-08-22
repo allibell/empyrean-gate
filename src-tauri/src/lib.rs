@@ -5,6 +5,7 @@
 
 pub mod audio;
 pub mod config;
+pub mod diagnostics;
 pub mod engine;
 pub mod geometry;
 pub mod layers;
@@ -42,6 +43,10 @@ pub fn start_backend() -> Backend {
         st.interfaces = list_interfaces();
         st.version = updater::CURRENT_VERSION.to_string();
         st.firewall_pending = firewall::rule_missing(port);
+        let diagnostics = diagnostics::status();
+        st.diagnostics_path = diagnostics.path;
+        st.diagnostics_active = diagnostics.active;
+        st.diagnostics_error = diagnostics.error;
     }
     if takeover {
         log::info!("port {port} is busy — attempting takeover of the running instance");
@@ -190,7 +195,12 @@ fn backend_info(state: tauri::State<'_, Backend>) -> serde_json::Value {
 }
 
 pub fn run(headless: bool) {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    let diagnostics = diagnostics::init();
+    if diagnostics.active {
+        log::info!("persistent diagnostics: {}", diagnostics.path);
+    } else {
+        log::warn!("persistent diagnostics unavailable at {}: {}", diagnostics.path, diagnostics.error);
+    }
     let backend = start_backend();
     let state = backend.state.clone();
     state.headless.store(headless, Ordering::SeqCst);

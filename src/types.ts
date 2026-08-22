@@ -312,6 +312,9 @@ export interface RuntimeStatus {
   update_state: string;
   video: VideoSourceStatus;
   show: ScheduledShowStatus;
+  diagnostics_path: string;
+  diagnostics_active: boolean;
+  diagnostics_error: string;
 }
 
 export interface ScheduledShowStatus {

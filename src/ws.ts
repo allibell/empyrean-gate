@@ -220,6 +220,27 @@ export class GateClient {
     }
   }
 
+  async downloadDiagnostics(joinToken: string): Promise<void> {
+    const response = await fetch(`${this.httpBase}/diagnostics/recent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        client_id: this.clientId,
+        token: joinToken,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error((await response.text()) || `Diagnostics returned ${response.status}`);
+    }
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "empyrean-gate-diagnostics.txt";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
   async resolveMedia(url: string): Promise<ResolvedMedia> {
     const response = await fetch(`${this.httpBase}/media/resolve`, {
       method: "POST",

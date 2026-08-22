@@ -27,9 +27,45 @@ export default function Settings() {
       <OutputPanel config={config} />
       <GeometryPanel config={config} />
       <ClientsPanel />
+      <DiagnosticsPanel />
       <UpdatesPanel config={config} />
       <ThisDevicePanel />
     </div>
+  );
+}
+
+function DiagnosticsPanel() {
+  const { client, config, status } = useGate();
+  const [note, setNote] = useState("");
+  const path = status?.diagnostics_path ?? "";
+  return (
+    <section className="panel">
+      <h2>Diagnostics</h2>
+      <p className="hint">
+        Recent app logs are kept on the show machine in a bounded four-file set
+        (about 4 MB total). Downloads are capped at 2 MB and redact join credentials.
+      </p>
+      <p className={status?.diagnostics_active ? "ok" : "warn"}>
+        {status?.diagnostics_active ? "Persistent logging active" : "Persistent logging unavailable"}
+        {status?.diagnostics_error ? ` — ${status.diagnostics_error}` : ""}
+      </p>
+      {path && <p className="diagnostics-path" title={path}>{path}</p>}
+      <div className="add-row">
+        <button
+          disabled={!path}
+          onClick={() => void navigator.clipboard.writeText(path)
+            .then(() => setNote("Log path copied."))
+            .catch(() => setNote("Could not copy the path; select it above."))}
+        >Copy log path</button>
+        <button
+          disabled={!status?.diagnostics_active}
+          onClick={() => void client.downloadDiagnostics(config?.server.join_token ?? "")
+            .then(() => setNote("Diagnostics download started."))
+            .catch((error: unknown) => setNote(error instanceof Error ? error.message : "Download failed."))}
+        >Download recent diagnostics</button>
+      </div>
+      {note && <p className="hint" role="status">{note}</p>}
+    </section>
   );
 }
 

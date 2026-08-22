@@ -431,6 +431,24 @@ audit found the identity/lifecycle half of E1.31 was unimplemented.
       show. Add rekordbox track/cue/phrase metadata only after the beat/master path is
       proven on that hardware; official Bridge/TCNet remains an alternate adapter.
 
+## Round 14: persistent production diagnostics
+
+- [x] Replace console-only app logging with console + persistent logs under the
+      Empyrean Gate config directory. The current file and three backups are each
+      capped at 1 MiB; rotation closes the handle before renaming for Windows safety,
+      and any logging I/O failure is non-fatal to show output.
+- [x] Show persistent-log health and the exact local path in Settings, with a copy
+      action for desktop operators.
+- [x] Add a bounded 2 MiB recent-diagnostics download to Settings for desktop and
+      authenticated web clients. Credentials travel only in the POST body, responses
+      are `no-store`, remote requests require the exact join token (client IDs are
+      never treated as credentials), revoked clients are refused, and the export
+      redacts the configured join token plus credential-shaped URL query parameters.
+- [x] Focused unit coverage for rotation bounds, oversized-record truncation,
+      redaction, and diagnostics authorization. Automated Cargo/Vite execution is
+      deferred because the mandated compute-budget broker is absent on this machine;
+      no unbrokered build was run.
+
 ### Production performance baseline
 
 - The production show machine is an older Mac mini than the development Mac; exact

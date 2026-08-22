@@ -358,6 +358,10 @@ pub struct RuntimeStatus {
     pub update_state: String,
     pub video: VideoSourceStatus,
     pub show: ScheduledShowStatus,
+    /// Current bounded persistent log and whether it could be opened.
+    pub diagnostics_path: String,
+    pub diagnostics_active: bool,
+    pub diagnostics_error: String,
 }
 
 #[cfg(test)]

@@ -81,6 +81,7 @@ async fn serve(state: Arc<SharedState>, remote: RemoteChains) {
         .route("/media/resolve", post(resolve_media))
         .route("/media/stream/{id}", get(stream_media))
         .route("/media/file/{id}", get(serve_media_file))
+        .route("/diagnostics/recent", post(recent_diagnostics))
         .fallback(get(serve_asset))
         .layer(
             CorsLayer::new()
@@ -142,6 +143,50 @@ fn media_authorized(state: &SharedState, addr: SocketAddr, req: &ResolveRequest)
     }
     cfg.clients.iter().any(|c| c.id == req.client_id)
         || (!req.token.is_empty() && req.token == cfg.server.join_token)
+}
+
+#[derive(serde::Deserialize)]
+struct DiagnosticsRequest {
+    #[serde(default)]
+    client_id: String,
+    #[serde(default)]
+    token: String,
+}
+
+fn client_authorized(state: &SharedState, addr: SocketAddr, client_id: &str, token: &str) -> bool {
+    let cfg = state.config.read();
+    if cfg.clients.iter().any(|client| client.id == client_id && client.revoked) {
+        return false;
+    }
+    addr.ip().is_loopback()
+        || (!token.is_empty() && token == cfg.server.join_token)
+}
+
+async fn recent_diagnostics(
+    State(ctx): State<Ctx>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    axum::Json(req): axum::Json<DiagnosticsRequest>,
+) -> Response {
+    if !client_authorized(&ctx.state, addr, &req.client_id, &req.token) {
+        return (StatusCode::FORBIDDEN, "diagnostics access denied").into_response();
+    }
+    let join_token = ctx.state.config.read().server.join_token.clone();
+    match crate::diagnostics::recent_text(&[&join_token, &req.token]) {
+        Ok(text) => Response::builder()
+            .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
+            .header(
+                header::CONTENT_DISPOSITION,
+                "attachment; filename=empyrean-gate-diagnostics.txt",
+            )
+            .header(header::CACHE_CONTROL, "no-store")
+            .body(Body::from(text))
+            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response()),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("could not read diagnostics: {error}"),
+        )
+            .into_response(),
+    }
 }
 
 async fn resolve_media(
@@ -920,4 +965,50 @@ async fn handle_msg(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod diagnostics_tests {
+    use super::*;
+    use crate::config::{AppConfig, ClientRecord};
+
+    fn remote() -> SocketAddr {
+        "192.0.2.10:1234".parse().unwrap()
+    }
+
+    #[test]
+    fn diagnostics_require_the_join_token_remotely() {
+        let mut config = AppConfig::default();
+        config.server.join_token = "show-secret".into();
+        config.clients.push(ClientRecord {
+            id: "operator".into(),
+            name: "Operator".into(),
+            revoked: false,
+        });
+        let state = SharedState::new(config);
+
+        assert!(!client_authorized(&state, remote(), "unknown", ""));
+        assert!(!client_authorized(&state, remote(), "operator", ""));
+        assert!(client_authorized(&state, remote(), "unknown", "show-secret"));
+    }
+
+    #[test]
+    fn revoked_clients_cannot_download_diagnostics() {
+        let mut config = AppConfig::default();
+        config.server.join_token = "show-secret".into();
+        config.clients.push(ClientRecord {
+            id: "revoked".into(),
+            name: "Revoked".into(),
+            revoked: true,
+        });
+        let state = SharedState::new(config);
+        assert!(!client_authorized(&state, remote(), "revoked", "show-secret"));
+    }
+
+    #[test]
+    fn loopback_diagnostics_do_not_require_a_token() {
+        let state = SharedState::new(AppConfig::default());
+        let loopback = "127.0.0.1:1234".parse().unwrap();
+        assert!(client_authorized(&state, loopback, "", ""));
+    }
 }

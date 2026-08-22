@@ -1721,6 +1721,14 @@ button.ghost {
   font-size: 15px;
 }
 
+.diagnostics-path {
+  overflow-wrap: anywhere;
+  user-select: text;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+}
+
 .layer-card,
 .source-card {
   background-color: var(--panel);
