@@ -139,6 +139,168 @@ main {
   -webkit-overflow-scrolling: touch;
 }
 
+/* ---- Show readiness ---- */
+
+.readiness-page {
+  width: min(1040px, 100%);
+  margin: 0 auto;
+  padding: 18px;
+}
+
+.readiness-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 24px;
+  border: 1px solid #3b3560;
+  border-left: 5px solid var(--accent2);
+  border-radius: 12px;
+  background-color: var(--bg2);
+  background-image: var(--surface-grad);
+}
+
+.readiness-hero.blocked { border-left-color: var(--danger); }
+.readiness-hero.review { border-left-color: #f4c95d; }
+.readiness-hero.ready { border-left-color: var(--ok); }
+.readiness-hero.standby { border-left-color: var(--accent2); }
+
+.readiness-kicker {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.readiness-hero h2 {
+  margin: 0;
+  font-size: clamp(22px, 4vw, 34px);
+}
+
+.readiness-hero p:not(.readiness-kicker) {
+  margin: 7px 0 0;
+  color: var(--muted);
+}
+
+.readiness-counts {
+  flex: 0 0 auto;
+  min-width: 88px;
+  text-align: center;
+}
+
+.readiness-counts strong {
+  display: block;
+  color: var(--ok);
+  font-size: 32px;
+  line-height: 1;
+}
+
+.readiness-counts span {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.readiness-caveat,
+.readiness-live-note {
+  margin: 12px 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.readiness-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.readiness-check {
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #2a2445;
+  border-radius: 10px;
+  background-color: var(--bg2);
+  background-image: var(--surface-grad);
+}
+
+.readiness-check.fail { border-color: rgba(255, 92, 122, 0.5); }
+.readiness-check.warn { border-color: rgba(244, 201, 93, 0.4); }
+
+.readiness-icon {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: #26203f;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.readiness-check.pass .readiness-icon { background: #123524; color: var(--ok); }
+.readiness-check.warn .readiness-icon { background: #3b310f; color: #f4c95d; }
+.readiness-check.fail .readiness-icon { background: #3a1220; color: var(--danger); }
+
+.readiness-copy { min-width: 0; flex: 1; }
+
+.readiness-check-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.readiness-check h3 {
+  margin: 3px 0 0;
+  font-size: 14px;
+}
+
+.readiness-check p {
+  margin: 7px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.readiness-check small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.readiness-badge {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #26203f;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.readiness-badge.pass { color: var(--ok); }
+.readiness-badge.warn { color: #f4c95d; }
+.readiness-badge.fail { color: var(--danger); }
+
+.readiness-action {
+  margin-top: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+@media (min-width: 701px) and (max-width: 1050px) {
+  .topbar { gap: 8px; }
+  .topbar nav button { padding-inline: 8px; }
+  .topbar > .gpu-name,
+  .topbar > .version-chip { display: none; }
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -3232,16 +3394,28 @@ button:disabled {
   .topbar nav {
     width: 100%;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 3px;
   }
   .topbar nav button {
     min-width: 0;
     min-height: 42px;
     padding: 8px 3px;
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1;
   }
+
+  .readiness-page {
+    padding: 10px 10px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .readiness-hero {
+    align-items: flex-start;
+    padding: 16px;
+  }
+
+  .readiness-counts { min-width: 58px; }
+  .readiness-grid { grid-template-columns: minmax(0, 1fr); }
 
   .live-page {
     height: auto;

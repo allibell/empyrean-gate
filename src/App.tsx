@@ -6,10 +6,12 @@ import { loadSelectedLiveColor } from "./liveColors";
 import Media from "./Media";
 import Replay from "./Replay";
 import Settings from "./Settings";
+import ShowReadiness from "./ShowReadiness";
 import { useGate } from "./state";
 
 const TABS = [
   { id: "live", label: "Live" },
+  { id: "ready", label: "Ready" },
   { id: "media", label: "Media" },
   { id: "replay", label: "Archive" },
   { id: "control", label: "Control" },
@@ -271,6 +273,7 @@ export default function App() {
 
       <main>
         {tab === "live" && <Live />}
+        {tab === "ready" && <ShowReadiness />}
         {/* Keep the decoder mounted while the operator visits Live/Settings.
             An offscreen composited video continues producing frames on iPadOS;
             unmounting it would stop the Gate feed at every tab change. */}
