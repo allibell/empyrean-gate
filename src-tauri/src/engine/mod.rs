@@ -806,6 +806,7 @@ fn run_frames(state: &Arc<SharedState>, engine: &mut Engine) {
     let mut frame_ms_ema = 0.0f32;
     let mut frame_number: u64 = 0;
     let mut video_revision: u64 = u64::MAX;
+    let mut next_sacn_retry = Instant::now();
 
     // The show clock belongs to the backend, not a browser. `current_stack` and
     // `transition_from` are render-only snapshots; the durable selection/index
@@ -873,8 +874,36 @@ fn run_frames(state: &Arc<SharedState>, engine: &mut Engine) {
                     s.configure(&cfg.geometry, &cfg.output);
                     let mut st = state.status.lock();
                     st.sacn_universes = s.universe_count();
-                    st.sacn_error = s.bind_error.clone();
+                    st.sacn_error = s.error_message();
                 }
+            }
+        }
+        // UDP socket creation and interface binding can fail transiently during
+        // boot, dock/NIC changes, or network profile transitions. Recover without
+        // requiring a config edit or GPU restart.
+        let retry_needed = sacn
+            .as_ref()
+            .map(|sender| sender.bind_error.is_some())
+            .unwrap_or(true);
+        if retry_needed && Instant::now() >= next_sacn_retry {
+            next_sacn_retry = Instant::now() + Duration::from_secs(2);
+            match sacn.as_mut() {
+                Some(sender) => sender.configure(&cfg.geometry, &cfg.output),
+                None => match SacnSender::new() {
+                    Ok(mut sender) => {
+                        sender.configure(&cfg.geometry, &cfg.output);
+                        sacn = Some(sender);
+                    }
+                    Err(e) => {
+                        state.status.lock().sacn_error =
+                            Some(format!("sACN socket unavailable: {e}; retrying"));
+                    }
+                },
+            }
+            if let Some(sender) = sacn.as_ref() {
+                let mut st = state.status.lock();
+                st.sacn_universes = sender.universe_count();
+                st.sacn_error = sender.error_message();
             }
         }
         if state.phases_transplanted.swap(false, Ordering::SeqCst) {
@@ -1445,6 +1474,9 @@ fn run_frames(state: &Arc<SharedState>, engine: &mut Engine) {
                 st.sacn_enabled = cfg.output.enabled;
                 // Last full-second bucket: steady, unlike a fractional-window ratio.
                 st.sacn_pps = pps_hist.back().copied().unwrap_or(0);
+                if let Some(sender) = sacn.as_ref() {
+                    st.sacn_error = sender.error_message();
+                }
                 st.fps_history = fps_hist.iter().copied().collect();
                 st.pps_history = pps_hist.iter().copied().collect();
                 st.master_brightness = cfg.render.master_brightness;

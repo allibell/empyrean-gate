@@ -96,6 +96,7 @@ pub struct SacnSender {
     gamma_lut: [u8; 256],
     lut_gamma: f32,
     send_errors: u64,
+    send_error: Option<String>,
 }
 
 fn make_socket(interface: &str) -> std::io::Result<UdpSocket> {
@@ -127,6 +128,7 @@ impl SacnSender {
             gamma_lut: [0; 256],
             lut_gamma: 0.0,
             send_errors: 0,
+            send_error: None,
         })
     }
 
@@ -138,7 +140,7 @@ impl SacnSender {
 
         let mut plan = Vec::new();
         let ppu = out.pixels_per_universe.max(1) as u32;
-        let ups = geometry::universes_per_spoke(geo, out) as u32;
+        let ups = geometry::universes_per_spoke(geo, out);
 
         for spoke in 0..geo.spokes {
             // Destination mode is exclusive. The old UI exposed multicast and
@@ -155,7 +157,12 @@ impl SacnSender {
                     break;
                 }
                 let count = ppu.min(geo.pixels_per_spoke - first_pixel);
-                let universe = out.start_universe + (spoke * ups + u) as u16;
+                let universe_number = out.start_universe as u32 + spoke * ups + u;
+                if universe_number > crate::config::MAX_E131_UNIVERSE {
+                    log::error!("sACN universe {universe_number} is outside the E1.31 data range");
+                    continue;
+                }
+                let universe = universe_number as u16;
                 let multicast = out
                     .multicast
                     .then(|| SocketAddrV4::new(multicast_group(universe), SACN_PORT));
@@ -282,6 +289,7 @@ impl SacnSender {
     /// fatal — one unreachable controller must not black out the rest.
     pub fn send_frame(&mut self, rgb: &[u8]) -> usize {
         let mut packets = 0usize;
+        let mut frame_error = None;
         self.streaming = true;
         for plan in &mut self.plan {
             let Some(src) = rgb.get(plan.src_offset..plan.src_offset + plan.src_len) else {
@@ -298,6 +306,7 @@ impl SacnSender {
                 match self.socket.send_to(&plan.packet, dest) {
                     Ok(_) => packets += 1,
                     Err(e) => {
+                        frame_error.get_or_insert_with(|| format!("send to {dest} failed: {e}"));
                         self.send_errors += 1;
                         if self.send_errors.is_power_of_two() {
                             log::warn!("sACN send to {dest} failed ({} total): {e}", self.send_errors);
@@ -311,8 +320,12 @@ impl SacnSender {
             self.sync_sequence = self.sync_sequence.wrapping_add(1);
             packet[SYNC_PKT_SEQ_OFFSET] = self.sync_sequence;
             for dest in dests.iter() {
-                if self.socket.send_to(packet, *dest).is_ok() {
-                    packets += 1;
+                match self.socket.send_to(packet, *dest) {
+                    Ok(_) => packets += 1,
+                    Err(e) => {
+                        frame_error
+                            .get_or_insert_with(|| format!("sync send to {dest} failed: {e}"));
+                    }
                 }
             }
         }
@@ -326,12 +339,18 @@ impl SacnSender {
             if now >= self.next_discovery {
                 self.next_discovery = now + DISCOVERY_INTERVAL;
                 for page in pages {
-                    if self.socket.send_to(page, *dest).is_ok() {
-                        packets += 1;
+                    match self.socket.send_to(page, *dest) {
+                        Ok(_) => packets += 1,
+                        Err(e) => {
+                            frame_error.get_or_insert_with(|| {
+                                format!("universe discovery send to {dest} failed: {e}")
+                            });
+                        }
                     }
                 }
             }
         }
+        self.send_error = frame_error;
         packets
     }
 
@@ -354,6 +373,10 @@ impl SacnSender {
 
     pub fn universe_count(&self) -> u16 {
         self.plan.len() as u16
+    }
+
+    pub fn error_message(&self) -> Option<String> {
+        self.bind_error.clone().or_else(|| self.send_error.clone())
     }
 }
 

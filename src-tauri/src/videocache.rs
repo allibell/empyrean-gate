@@ -126,6 +126,7 @@ pub async fn run(state: Arc<SharedState>, resolver: Arc<MediaResolver>) {
 /// Make the cache-state map reflect reality for every playlist entry.
 fn refresh_statuses(state: &SharedState) {
     let playlist = state.config.read().video.playlist.clone();
+    remove_orphaned_cache_files(&playlist);
     let mut map = state.video_cache.lock();
     let ids: HashSet<&str> = playlist.iter().map(|e| e.id.as_str()).collect();
     map.retain(|id, _| ids.contains(id.as_str()));
@@ -169,6 +170,35 @@ fn refresh_statuses(state: &SharedState) {
                         },
                     );
                 }
+            }
+        }
+    }
+}
+
+/// Playlist deletion must reclaim its download. Without this, every removed URL
+/// leaked a full video forever and an unattended machine could eventually fill
+/// its system disk even though the UI showed an empty playlist.
+fn remove_orphaned_cache_files(playlist: &[PlaylistEntry]) {
+    remove_orphaned_cache_files_in(&cache_dir(), playlist);
+}
+
+fn remove_orphaned_cache_files_in(dir: &Path, playlist: &[PlaylistEntry]) {
+    let live: HashSet<&str> = playlist.iter().map(|entry| entry.id.as_str()).collect();
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let id = name
+            .strip_suffix(".json.part")
+            .or_else(|| name.strip_suffix(".json"))
+            .or_else(|| name.strip_suffix(".part"))
+            .unwrap_or(&name);
+        // Both browser-added and folder-discovered entries use UUID-simple IDs.
+        // Do not delete arbitrary operator files that happen to live here.
+        let looks_managed = uuid::Uuid::parse_str(id).is_ok();
+        if looks_managed && !live.contains(id) {
+            match std::fs::remove_file(entry.path()) {
+                Ok(()) => log::info!("removed orphaned media cache file {name}"),
+                Err(e) => log::warn!("could not remove orphaned media cache file {name}: {e}"),
             }
         }
     }
@@ -234,14 +264,24 @@ async fn download(
         );
     }
     file.flush().await?;
+    file.sync_all().await?;
     drop(file);
     anyhow::ensure!(bytes > 100_000, "downloaded file is implausibly small ({bytes} bytes)");
 
-    std::fs::write(
-        dir.join(format!("{}.json", entry.id)),
-        serde_json::to_string(&CacheMeta { content_type })?,
-    )?;
+    let meta_path = dir.join(format!("{}.json", entry.id));
+    let meta_tmp = dir.join(format!("{}.json.part", entry.id));
+    let mut meta = tokio::fs::File::create(&meta_tmp).await?;
+    meta.write_all(serde_json::to_string(&CacheMeta { content_type })?.as_bytes())
+        .await?;
+    meta.sync_all().await?;
+    drop(meta);
+    if meta_path.exists() {
+        std::fs::remove_file(&meta_path)?;
+    }
+    std::fs::rename(&meta_tmp, &meta_path)?;
     std::fs::rename(&tmp, dir.join(&entry.id))?;
+    #[cfg(unix)]
+    std::fs::File::open(&dir)?.sync_all()?;
     refresh_statuses(state);
     state.broadcast_state();
     Ok(())
@@ -316,5 +356,40 @@ fn collect_videos(path: &Path, origin_dir: &str, depth: usize, out: &mut Vec<(St
         {
             out.push((origin_dir.to_string(), p.to_string_lossy().to_string()));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cache_cleanup_removes_deleted_entries_but_preserves_operator_files() {
+        let dir = std::env::temp_dir().join(format!(
+            "empyrean-gate-cache-cleanup-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let live = uuid::Uuid::new_v4().simple().to_string();
+        let orphan = uuid::Uuid::new_v4().simple().to_string();
+        std::fs::write(dir.join(&live), b"live").unwrap();
+        std::fs::write(dir.join(format!("{orphan}.part")), b"partial").unwrap();
+        std::fs::write(dir.join("README"), b"operator note").unwrap();
+        let playlist = vec![PlaylistEntry {
+            id: live.clone(),
+            title: "live".into(),
+            source: "https://example.com/live.mp4".into(),
+            kind: PlaylistKind::Url,
+            from_dir: String::new(),
+        }];
+
+        remove_orphaned_cache_files_in(&dir, &playlist);
+
+        assert!(dir.join(live).exists());
+        assert!(!dir.join(format!("{orphan}.part")).exists());
+        assert!(dir.join("README").exists());
+        std::fs::remove_file(dir.join(playlist[0].id.clone())).unwrap();
+        std::fs::remove_file(dir.join("README")).unwrap();
+        std::fs::remove_dir(dir).unwrap();
     }
 }

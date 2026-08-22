@@ -36,17 +36,22 @@ pub struct Backend {
 pub fn start_backend() -> Backend {
     let cfg = config::load();
     let port = cfg.server.port;
+    let handover_token = cfg.server.join_token.clone();
+    let lan_server = cfg.server.bind != "127.0.0.1";
     let takeover = port_in_use(port);
     let state = SharedState::new(cfg);
+    // No instance may transmit until it either owns the control port or has
+    // completed an authenticated handover from the process that does.
+    state.sacn_hold.store(true, Ordering::SeqCst);
     {
         let mut st = state.status.lock();
         st.interfaces = list_interfaces();
         st.version = updater::CURRENT_VERSION.to_string();
-        st.firewall_pending = firewall::rule_missing(port);
+        st.firewall_pending = lan_server && firewall::rule_missing(port);
     }
+    let mut handover_committed = !takeover;
     if takeover {
         log::info!("port {port} is busy — attempting takeover of the running instance");
-        state.sacn_hold.store(true, Ordering::SeqCst);
     }
     let remote_chains = audio::spawn(state.clone());
     rhythm::spawn(state.clone());
@@ -63,12 +68,15 @@ pub fn start_backend() -> Backend {
         // frame periods.
         wait_for_engine(&state, std::time::Duration::from_secs(8));
         let t0 = std::time::Instant::now();
-        let prepared = match fetch_handover_state(port) {
+        let prepared = match fetch_handover_state(port, &handover_token) {
             Ok(grant) => {
                 log::info!("takeover phase 1: adopted running state; warming pipeline");
                 *state.layer_phases.lock() = grant.layer_phases;
                 state.phases_transplanted.store(true, Ordering::SeqCst);
-                state.update_config(|c| *c = grant.config);
+                // The old process still owns config.json and its .tmp/.bak names.
+                // Adopt in memory only; it has already persisted this snapshot.
+                *state.config.write() = grant.config;
+                state.bump_config();
                 wait_frames(&state, 3, std::time::Duration::from_secs(2));
                 true
             }
@@ -77,29 +85,49 @@ pub fn start_backend() -> Backend {
                 false
             }
         };
-        match commit_handover(port) {
+        match commit_handover(port, &handover_token) {
             Ok(grant) => {
                 *state.layer_phases.lock() = grant.layer_phases;
                 state.phases_transplanted.store(true, Ordering::SeqCst);
                 if !prepared {
-                    state.update_config(|c| *c = grant.config);
+                    *state.config.write() = grant.config;
+                    state.bump_config();
                 }
                 log::info!(
                     "takeover committed in {:.0} ms total; resuming sACN",
                     t0.elapsed().as_secs_f32() * 1000.0
                 );
+                handover_committed = true;
             }
             Err(e) => {
                 log::warn!(
-                    "takeover commit failed ({e}); continuing anyway — the server will \
-                     retry binding the port"
+                    "takeover commit failed ({e}); holding sACN until the old process \
+                     releases the control port"
                 );
             }
         }
-        state.sacn_hold.store(false, Ordering::SeqCst);
+        if handover_committed {
+            state.sacn_hold.store(false, Ordering::SeqCst);
+        }
     }
 
     server::spawn(state.clone(), remote_chains);
+    if state.sacn_hold.load(Ordering::SeqCst) {
+        let recovery = state.clone();
+        std::thread::Builder::new()
+            .name("control-port-gate".into())
+            .spawn(move || {
+                while !recovery.shutdown.load(Ordering::Relaxed) {
+                    if recovery.server_bound.load(Ordering::SeqCst) {
+                        log::info!("control port acquired; enabling configured sACN output");
+                        recovery.sacn_hold.store(false, Ordering::SeqCst);
+                        return;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+            })
+            .expect("spawn takeover recovery thread");
+    }
     updater::spawn(state.clone());
     Backend { state }
 }
@@ -133,16 +161,18 @@ fn handover_agent() -> ureq::Agent {
         .into()
 }
 
-fn fetch_handover_state(port: u16) -> anyhow::Result<protocol::HandoverGrant> {
+fn fetch_handover_state(port: u16, token: &str) -> anyhow::Result<protocol::HandoverGrant> {
     let mut resp = handover_agent()
         .get(format!("http://127.0.0.1:{port}/handover/state"))
+        .header("X-Empyrean-Handover", token)
         .call()?;
     Ok(resp.body_mut().read_json::<protocol::HandoverGrant>()?)
 }
 
-fn commit_handover(port: u16) -> anyhow::Result<protocol::HandoverGrant> {
+fn commit_handover(port: u16, token: &str) -> anyhow::Result<protocol::HandoverGrant> {
     let mut resp = handover_agent()
         .post(format!("http://127.0.0.1:{port}/handover"))
+        .header("X-Empyrean-Handover", token)
         .send_empty()?;
     Ok(resp.body_mut().read_json::<protocol::HandoverGrant>()?)
 }

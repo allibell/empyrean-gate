@@ -363,7 +363,9 @@ export default function Media() {
     if (cachedOrLocal) {
       // Served by the Gate itself — no internet involved.
       replaceMedia({
-        playbackUrl: `${client.httpBase}/media/file/${entry.id}`,
+        playbackUrl: client.authenticatedMediaUrl(
+          `${client.httpBase}/media/file/${entry.id}`,
+        ),
         title: entry.title,
         sourceUrl: entry.source,
         resolvedBy: entry.kind === "local_file" ? "Gate machine file" : "Gate media cache",

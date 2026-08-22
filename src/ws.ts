@@ -30,7 +30,7 @@ async function backendIsAvailable(hostname: string, port: number): Promise<boole
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 350);
   try {
-    const response = await fetch(`http://${hostname}:${port}/handover/state`, {
+    const response = await fetch(`http://${hostname}:${port}/health`, {
       cache: "no-store",
       signal: controller.signal,
     });
@@ -137,7 +137,10 @@ export class GateClient {
   }
 
   private newClientId(): string {
-    const id = `client-${Math.random().toString(36).slice(2, 8)}`;
+    const random = typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+    const id = `client-${random}`;
     localStorage.setItem("empyrean-client-id", id);
     return id;
   }
@@ -238,11 +241,19 @@ export class GateClient {
       resolved_by: string;
     };
     return {
-      playbackUrl: new URL(value.playback_url, `${this.httpBase}/`).toString(),
+      playbackUrl: this.authenticatedMediaUrl(
+        new URL(value.playback_url, `${this.httpBase}/`).toString(),
+      ),
       title: value.title,
       sourceUrl: value.source_url,
       resolvedBy: value.resolved_by,
     };
+  }
+
+  authenticatedMediaUrl(url: string): string {
+    const value = new URL(url, `${this.httpBase}/`);
+    value.searchParams.set("client_id", this.clientId);
+    return value.toString();
   }
 
   startVideo(title: string, sourceUrl: string) {

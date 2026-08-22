@@ -66,9 +66,18 @@ fn updater_thread(state: Arc<SharedState>) {
 
     // First auto-check shortly after startup, then every CHECK_INTERVAL.
     let mut next_check = Instant::now() + Duration::from_secs(30);
-    let mut latest: Option<(String, String)> = None; // (version, download url)
+    let mut latest: Option<(String, String, String)> = None; // version, URL, sha256
+    let mut successor_launched = false;
 
     while !state.shutdown.load(Ordering::Relaxed) {
+        if successor_launched {
+            // A double click or queued auto-install request must not launch a
+            // second successor while the first one is warming up/taking over.
+            state.update_check_requested.store(false, Ordering::SeqCst);
+            state.update_install_requested.store(false, Ordering::SeqCst);
+            std::thread::sleep(Duration::from_millis(500));
+            continue;
+        }
         let manual_check = state.update_check_requested.swap(false, Ordering::SeqCst);
         let install = state.update_install_requested.swap(false, Ordering::SeqCst);
         let auto_check = state.config.read().update.auto_check;
@@ -76,10 +85,10 @@ fn updater_thread(state: Arc<SharedState>) {
         if manual_check || (auto_check && Instant::now() >= next_check) {
             next_check = Instant::now() + CHECK_INTERVAL;
             match check_latest() {
-                Ok(Some((version, url))) => {
+                Ok(Some((version, url, digest))) => {
                     if is_newer(&version) {
                         log::info!("update available: v{version} (running v{})", effective_version());
-                        latest = Some((version.clone(), url));
+                        latest = Some((version.clone(), url, digest));
                         set_update_status(&state, Some(version), "");
                         if state.config.read().update.auto_install {
                             state.update_install_requested.store(true, Ordering::SeqCst);
@@ -98,11 +107,12 @@ fn updater_thread(state: Arc<SharedState>) {
         }
 
         if install {
-            if let Some((version, url)) = latest.clone() {
+            if let Some((version, url, digest)) = latest.clone() {
                 set_update_status(&state, Some(version.clone()), "downloading…");
-                match download_and_launch(&version, &url, &state) {
+                match download_and_launch(&version, &url, &digest, &state) {
                     Ok(()) => {
                         // The successor's takeover will shut us down; just wait.
+                        successor_launched = true;
                         set_update_status(&state, Some(version), "handing over…");
                     }
                     Err(e) => {
@@ -127,7 +137,7 @@ fn is_newer(candidate: &str) -> bool {
 }
 
 /// Latest release's (version, asset download url) for this platform.
-fn check_latest() -> anyhow::Result<Option<(String, String)>> {
+fn check_latest() -> anyhow::Result<Option<(String, String, String)>> {
     let Some(asset) = asset_name() else {
         anyhow::bail!("no release asset for this platform");
     };
@@ -145,17 +155,23 @@ fn check_latest() -> anyhow::Result<Option<(String, String)>> {
     if version.is_empty() {
         return Ok(None);
     }
-    let url = body["assets"]
+    let release_asset = body["assets"]
         .as_array()
         .into_iter()
         .flatten()
         .find(|a| a["name"].as_str() == Some(asset))
-        .and_then(|a| a["browser_download_url"].as_str())
-        .map(str::to_string);
-    match url {
-        Some(url) => Ok(Some((version, url))),
-        None => anyhow::bail!("release v{version} has no asset '{asset}'"),
-    }
+        .ok_or_else(|| anyhow::anyhow!("release v{version} has no asset '{asset}'"))?;
+    let url = release_asset["browser_download_url"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("release asset '{asset}' has no download URL"))?
+        .to_string();
+    let digest = release_asset["digest"]
+        .as_str()
+        .and_then(|value| value.strip_prefix("sha256:"))
+        .filter(|value| value.len() == 64 && value.chars().all(|c| c.is_ascii_hexdigit()))
+        .ok_or_else(|| anyhow::anyhow!("release asset '{asset}' has no valid SHA-256 digest"))?
+        .to_ascii_lowercase();
+    Ok(Some((version, url, digest)))
 }
 
 fn versioned_path(version: &str) -> anyhow::Result<PathBuf> {
@@ -169,7 +185,12 @@ fn versioned_path(version: &str) -> anyhow::Result<PathBuf> {
 
 /// Download the new binary next to the current one and launch it; the successor
 /// takes over via the standard two-phase handover and this process exits.
-fn download_and_launch(version: &str, url: &str, state: &SharedState) -> anyhow::Result<()> {
+fn download_and_launch(
+    version: &str,
+    url: &str,
+    expected_sha256: &str,
+    state: &SharedState,
+) -> anyhow::Result<()> {
     let target = versioned_path(version)?;
     let tmp = target.with_extension("download");
 
@@ -185,11 +206,34 @@ fn download_and_launch(version: &str, url: &str, state: &SharedState) -> anyhow:
     let mut reader = resp.body_mut().as_reader();
     let mut file = std::fs::File::create(&tmp)
         .map_err(|e| anyhow::anyhow!("cannot write next to the current exe ({e}); is the directory writable?"))?;
-    let bytes = std::io::copy(&mut reader, &mut file)?;
+    use sha2::Digest;
+    use std::io::{Read, Write};
+    let mut hasher = sha2::Sha256::new();
+    let mut buffer = [0u8; 64 * 1024];
+    let mut bytes = 0u64;
+    loop {
+        let read = reader.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        file.write_all(&buffer[..read])?;
+        hasher.update(&buffer[..read]);
+        bytes += read as u64;
+    }
+    file.sync_all()?;
     drop(file);
     anyhow::ensure!(
         bytes > 1_000_000,
         "downloaded file is implausibly small ({bytes} bytes)"
+    );
+    let actual_sha256 = hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    anyhow::ensure!(
+        actual_sha256 == expected_sha256,
+        "downloaded binary failed SHA-256 verification (expected {expected_sha256}, got {actual_sha256})"
     );
 
     #[cfg(unix)]
@@ -197,7 +241,19 @@ fn download_and_launch(version: &str, url: &str, state: &SharedState) -> anyhow:
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))?;
     }
+    if target.exists() {
+        std::fs::remove_file(&target).map_err(|e| {
+            anyhow::anyhow!(
+                "cannot replace previously downloaded {}: {e}",
+                target.display()
+            )
+        })?;
+    }
     std::fs::rename(&tmp, &target)?;
+    #[cfg(unix)]
+    if let Some(dir) = target.parent() {
+        std::fs::File::open(dir)?.sync_all()?;
+    }
     log::info!("downloaded {} ({bytes} bytes); launching successor", target.display());
 
     let mut cmd = std::process::Command::new(&target);

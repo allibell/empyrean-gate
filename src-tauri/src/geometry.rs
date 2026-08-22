@@ -19,13 +19,13 @@ pub fn pixel_polar(geo: &GeometryConfig, spoke: u32, i: u32) -> (f32, f32) {
 }
 
 /// Universes needed per spoke (each spoke starts on a fresh universe boundary).
-pub fn universes_per_spoke(geo: &GeometryConfig, out: &OutputConfig) -> u16 {
+pub fn universes_per_spoke(geo: &GeometryConfig, out: &OutputConfig) -> u32 {
     let ppu = out.pixels_per_universe.max(1) as u32;
-    geo.pixels_per_spoke.div_ceil(ppu) as u16
+    geo.pixels_per_spoke.div_ceil(ppu)
 }
 
-pub fn total_universes(geo: &GeometryConfig, out: &OutputConfig) -> u16 {
-    universes_per_spoke(geo, out) * geo.spokes as u16
+pub fn total_universes(geo: &GeometryConfig, out: &OutputConfig) -> u32 {
+    universes_per_spoke(geo, out).saturating_mul(geo.spokes)
 }
 
 /// The unicast destination (controller IP) for a given spoke, if configured.

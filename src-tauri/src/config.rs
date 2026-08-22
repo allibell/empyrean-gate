@@ -5,6 +5,12 @@ use crate::layers::{BlendMode, LayerCfg, LayerKind};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+/// Matches the workload ceiling exercised by engine-smoke. A corrupt config or
+/// remote client must not turn one settings update into an unbounded GPU allocation.
+pub const MAX_PIXEL_COUNT: usize = 500_000;
+pub const MAX_E131_UNIVERSE: u32 = 63_999;
+pub const MAX_CLIENT_RECORDS: usize = 256;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GeometryConfig {
@@ -34,7 +40,9 @@ impl Default for GeometryConfig {
 
 impl GeometryConfig {
     pub fn pixel_count(&self) -> usize {
-        (self.spokes * self.pixels_per_spoke) as usize
+        (self.spokes as usize)
+            .saturating_mul(self.pixels_per_spoke as usize)
+            .min(MAX_PIXEL_COUNT)
     }
 }
 
@@ -142,7 +150,10 @@ impl Default for ServerConfig {
             max_preview_clients: 10,
             auth_token: None,
             join_token: String::new(),
-            require_token: false,
+            // A fresh show machine should not accept arbitrary control messages
+            // from every device on the venue LAN. The desktop remains exempt and
+            // its Connect QR carries the generated token.
+            require_token: true,
         }
     }
 }
@@ -157,17 +168,9 @@ pub struct ClientRecord {
     pub revoked: bool,
 }
 
-/// Random URL-safe token (join links). Seeded from `RandomState`, which is
-/// randomly keyed per process — fine for LAN join control, not cryptography.
+/// Random URL-safe token used by join links and authenticated local handover.
 pub fn generate_token() -> String {
-    use std::hash::{BuildHasher, Hasher};
-    let mut out = String::new();
-    for i in 0..2 {
-        let mut h = std::collections::hash_map::RandomState::new().build_hasher();
-        h.write_u64(std::process::id() as u64 ^ (i as u64) << 32);
-        out.push_str(&format!("{:08x}", h.finish() as u32));
-    }
-    out
+    uuid::Uuid::new_v4().simple().to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -578,6 +581,101 @@ impl Default for AppConfig {
     }
 }
 
+impl AppConfig {
+    /// Reject values that can panic, overflow protocol fields, or allocate beyond
+    /// the workload the engine is designed and tested to sustain.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.geometry.spokes == 0 || self.geometry.pixels_per_spoke == 0 {
+            return Err("geometry must have at least one spoke and one pixel per spoke".into());
+        }
+        let pixels = (self.geometry.spokes as usize)
+            .checked_mul(self.geometry.pixels_per_spoke as usize)
+            .ok_or_else(|| "geometry pixel count overflowed".to_string())?;
+        if pixels > MAX_PIXEL_COUNT {
+            return Err(format!(
+                "geometry requests {pixels} pixels; the tested limit is {MAX_PIXEL_COUNT}"
+            ));
+        }
+        if self.output.pixels_per_universe == 0 || self.output.pixels_per_universe > 170 {
+            return Err("pixels per universe must be between 1 and 170".into());
+        }
+        if self.output.start_universe == 0
+            || self.output.start_universe as u32 > MAX_E131_UNIVERSE
+        {
+            return Err(format!(
+                "start universe must be between 1 and {MAX_E131_UNIVERSE}"
+            ));
+        }
+        if self.output.sync_universe as u32 > MAX_E131_UNIVERSE {
+            return Err(format!(
+                "sync universe must be 0 or between 1 and {MAX_E131_UNIVERSE}"
+            ));
+        }
+        if self.output.strings_per_controller == 0 {
+            return Err("strings per controller must be at least 1".into());
+        }
+        let universes_per_spoke = self
+            .geometry
+            .pixels_per_spoke
+            .div_ceil(self.output.pixels_per_universe as u32);
+        let universe_count = universes_per_spoke
+            .checked_mul(self.geometry.spokes)
+            .ok_or_else(|| "sACN universe count overflowed".to_string())?;
+        let last_universe = self.output.start_universe as u32 + universe_count.saturating_sub(1);
+        if last_universe > MAX_E131_UNIVERSE {
+            return Err(format!(
+                "geometry reaches universe {last_universe}; E1.31 data universes stop at {MAX_E131_UNIVERSE}"
+            ));
+        }
+        if self.layers.len() > crate::layers::MAX_LAYERS {
+            return Err(format!(
+                "live stack has {} layers; the limit is {}",
+                self.layers.len(),
+                crate::layers::MAX_LAYERS
+            ));
+        }
+        if self.audio.sources.len() > crate::layers::MAX_AUDIO_SOURCES {
+            return Err(format!(
+                "{} audio sources configured; the limit is {}",
+                self.audio.sources.len(),
+                crate::layers::MAX_AUDIO_SOURCES
+            ));
+        }
+        if let Some(stack) = self
+            .saved_stacks
+            .iter()
+            .chain(
+                self.saved_playlists
+                    .iter()
+                    .flat_map(|playlist| playlist.entries.iter().map(|entry| &entry.stack)),
+            )
+            .find(|stack| stack.layers.len() > crate::layers::MAX_LAYERS)
+        {
+            return Err(format!(
+                "saved stack '{}' has {} layers; the limit is {}",
+                stack.name,
+                stack.layers.len(),
+                crate::layers::MAX_LAYERS
+            ));
+        }
+        if self.server.port == 0 {
+            return Err("server port must be between 1 and 65535".into());
+        }
+        if !matches!(self.server.bind.as_str(), "0.0.0.0" | "127.0.0.1") {
+            return Err(
+                "server bind must be 0.0.0.0 (LAN + local) or 127.0.0.1 (local only)".into(),
+            );
+        }
+        if self.clients.len() > MAX_CLIENT_RECORDS {
+            return Err(format!(
+                "{} remembered clients; the limit is {MAX_CLIENT_RECORDS}",
+                self.clients.len()
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// A stack that looks good out of the box: deep noise base, harmonic rings riding
 /// the bass, sparkles on the treble, and beat rings.
 fn default_layer_stack() -> Vec<LayerCfg> {
@@ -649,29 +747,35 @@ pub fn config_path() -> PathBuf {
 
 pub fn load() -> AppConfig {
     let path = config_path();
+    let file_lock = match ConfigFileLock::acquire(&path) {
+        Ok(lock) => Some(lock),
+        Err(e) => {
+            log::error!("cannot lock config {}: {e}", path.display());
+            None
+        }
+    };
+    let tmp = path.with_extension("json.tmp");
     let bak = path.with_extension("json.bak");
     // A broken main config falls back to the .bak kept by `save` — losing the
     // config wouldn't just reset the show, it would regenerate the sACN CID.
     let mut recovered = false;
-    let mut cfg = match std::fs::read_to_string(&path) {
-        Ok(text) => match serde_json::from_str(&text) {
-            Ok(cfg) => {
-                log::info!("loaded config from {}", path.display());
-                cfg
-            }
-            Err(e) => {
-                log::error!("config at {} is invalid ({e}); trying backup", path.display());
-                recovered = true;
-                load_backup(&bak)
-            }
-        },
-        Err(_) if bak.exists() => {
-            // Main missing but a backup exists: a save was interrupted between
-            // renames, or the file was deleted. Either way the backup is newer
-            // than "defaults".
-            log::warn!("no config at {}; trying backup", path.display());
+    let mut cfg = match read_config(&path) {
+        Ok(cfg) => {
+            log::info!("loaded config from {}", path.display());
+            cfg
+        }
+        Err(e) if path.exists() => {
+            log::error!("config at {} is invalid ({e}); trying recovery files", path.display());
             recovered = true;
-            load_backup(&bak)
+            load_recovery(&tmp, &bak)
+        }
+        Err(_) if tmp.exists() || bak.exists() => {
+            // Main missing with recovery files present: a save may have been
+            // interrupted between renames. A complete temp file is the newest
+            // snapshot; the backup is the last known-good fallback.
+            log::warn!("no config at {}; trying recovery files", path.display());
+            recovered = true;
+            load_recovery(&tmp, &bak)
         }
         Err(_) => {
             log::info!("no config at {}; using defaults", path.display());
@@ -691,7 +795,16 @@ pub fn load() -> AppConfig {
         dirty = true;
     }
     if dirty {
-        save(&cfg);
+        if file_lock.is_none() {
+            log::error!(
+                "generated/recovered config is not persisted because its lock is unavailable"
+            );
+        } else if let Err(e) = save_to_path(&cfg, &path) {
+            log::error!(
+                "failed to persist recovered/generated config {}: {e}",
+                path.display()
+            );
+        }
     }
     // Isolated integration tests and parallel local instances can choose a port
     // without rewriting the persisted operator configuration.
@@ -704,34 +817,72 @@ pub fn load() -> AppConfig {
     cfg
 }
 
-fn load_backup(bak: &std::path::Path) -> AppConfig {
-    let parsed = std::fs::read_to_string(bak)
+fn read_config(path: &std::path::Path) -> Result<AppConfig, String> {
+    std::fs::read_to_string(path)
         .map_err(|e| e.to_string())
-        .and_then(|t| serde_json::from_str(&t).map_err(|e| e.to_string()));
-    match parsed {
-        Ok(cfg) => {
-            log::warn!("recovered config from backup {}", bak.display());
-            cfg
+        .and_then(|text| serde_json::from_str(&text).map_err(|e| e.to_string()))
+        .and_then(|cfg: AppConfig| {
+            cfg.validate()?;
+            Ok(cfg)
+        })
+}
+
+fn load_recovery(tmp: &std::path::Path, bak: &std::path::Path) -> AppConfig {
+    for (kind, path) in [("temporary file", tmp), ("backup", bak)] {
+        match read_config(path) {
+            Ok(cfg) => {
+                log::warn!("recovered config from {kind} {}", path.display());
+                return cfg;
+            }
+            Err(e) if path.exists() => {
+                log::error!("config {kind} {} unusable ({e})", path.display());
+            }
+            Err(_) => {}
         }
-        Err(e) => {
-            log::error!("backup {} unusable ({e}); using defaults", bak.display());
-            AppConfig::default()
+    }
+    log::error!("no usable config recovery file; using defaults");
+    AppConfig::default()
+}
+
+pub fn save(cfg: &AppConfig) -> Result<(), String> {
+    let path = config_path();
+    let _file_lock = ConfigFileLock::acquire(&path)
+        .map_err(|e| format!("cannot lock {}: {e}", path.display()))?;
+    save_to_path(cfg, &path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+struct ConfigFileLock(std::fs::File);
+
+impl ConfigFileLock {
+    fn acquire(path: &std::path::Path) -> std::io::Result<Self> {
+        use fs2::FileExt;
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
         }
+        let lock_path = path.with_extension("json.lock");
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(lock_path)?;
+        file.lock_exclusive()?;
+        Ok(Self(file))
     }
 }
 
-pub fn save(cfg: &AppConfig) {
-    let path = config_path();
-    if let Some(dir) = path.parent() {
-        let _ = std::fs::create_dir_all(dir);
+impl Drop for ConfigFileLock {
+    fn drop(&mut self) {
+        let _ = fs2::FileExt::unlock(&self.0);
     }
-    let text = match serde_json::to_string_pretty(cfg) {
-        Ok(text) => text,
-        Err(e) => {
-            log::error!("failed to serialize config: {e}");
-            return;
-        }
-    };
+}
+
+fn save_to_path(cfg: &AppConfig, path: &std::path::Path) -> std::io::Result<()> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let text = serde_json::to_string_pretty(cfg)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     // Crash-safe write: a plain overwrite truncates first, so a power cut
     // mid-save destroys the config (and with it the persistent sACN CID).
     // Instead: write + fsync a temp file, keep the previous config as .bak,
@@ -739,26 +890,145 @@ pub fn save(cfg: &AppConfig) {
     // backup, or the new file is intact, and `load` knows to try the .bak.
     let tmp = path.with_extension("json.tmp");
     let bak = path.with_extension("json.bak");
-    let result = (|| -> std::io::Result<()> {
-        use std::io::Write;
-        let mut f = std::fs::File::create(&tmp)?;
-        f.write_all(text.as_bytes())?;
-        f.sync_all()?;
-        drop(f);
-        if path.exists() {
-            let _ = std::fs::remove_file(&bak); // Windows: rename won't overwrite
-            std::fs::rename(&path, &bak)?;
+    use std::io::Write;
+    let mut f = std::fs::File::create(&tmp)?;
+    f.write_all(text.as_bytes())?;
+    f.sync_all()?;
+    drop(f);
+    if path.exists() {
+        match std::fs::remove_file(&bak) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
         }
-        std::fs::rename(&tmp, &path)
-    })();
-    if let Err(e) = result {
-        log::error!("failed to save config to {}: {e}", path.display());
+        std::fs::rename(path, &bak)?;
     }
+    // If this rename fails, deliberately retain both the synced temp file and
+    // the backup. `load` prefers the temp snapshot and can finish recovery.
+    std::fs::rename(&tmp, path)?;
+
+    // Persist the directory entry as well as the file contents on Unix. Windows
+    // does not support opening directories through std::fs::File.
+    #[cfg(unix)]
+    if let Some(dir) = path.parent() {
+        std::fs::File::open(dir)?.sync_all()?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_path(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "empyrean-gate-{label}-{}.json",
+            uuid::Uuid::new_v4().simple()
+        ))
+    }
+
+    fn cleanup_test_config(path: &std::path::Path) {
+        for candidate in [
+            path.to_path_buf(),
+            path.with_extension("json.tmp"),
+            path.with_extension("json.bak"),
+        ] {
+            let _ = std::fs::remove_file(candidate);
+        }
+    }
+
+    #[test]
+    fn durable_save_keeps_the_previous_snapshot_as_backup() {
+        let path = test_path("durable-save");
+        let mut first = AppConfig::default();
+        first.output.source_name = "first".into();
+        let mut second = first.clone();
+        second.output.source_name = "second".into();
+
+        save_to_path(&first, &path).unwrap();
+        save_to_path(&second, &path).unwrap();
+
+        assert_eq!(read_config(&path).unwrap().output.source_name, "second");
+        assert_eq!(
+            read_config(&path.with_extension("json.bak"))
+                .unwrap()
+                .output
+                .source_name,
+            "first"
+        );
+        cleanup_test_config(&path);
+    }
+
+    #[test]
+    fn recovery_prefers_a_complete_synced_temp_snapshot() {
+        let path = test_path("temp-recovery");
+        let tmp = path.with_extension("json.tmp");
+        let bak = path.with_extension("json.bak");
+        let mut newest = AppConfig::default();
+        newest.output.source_name = "newest".into();
+        let mut older = newest.clone();
+        older.output.source_name = "older".into();
+        std::fs::write(&tmp, serde_json::to_string(&newest).unwrap()).unwrap();
+        std::fs::write(&bak, serde_json::to_string(&older).unwrap()).unwrap();
+
+        assert_eq!(load_recovery(&tmp, &bak).output.source_name, "newest");
+        cleanup_test_config(&path);
+    }
+
+    #[test]
+    fn recovery_ignores_a_partial_temp_file_and_uses_backup() {
+        let path = test_path("backup-recovery");
+        let tmp = path.with_extension("json.tmp");
+        let bak = path.with_extension("json.bak");
+        let mut backup = AppConfig::default();
+        backup.output.source_name = "backup".into();
+        std::fs::write(&tmp, b"{\"partial\":").unwrap();
+        std::fs::write(&bak, serde_json::to_string(&backup).unwrap()).unwrap();
+
+        assert_eq!(load_recovery(&tmp, &bak).output.source_name, "backup");
+        cleanup_test_config(&path);
+    }
+
+    #[test]
+    fn validation_rejects_unbounded_gpu_and_e131_workloads() {
+        let mut config = AppConfig::default();
+        config.geometry.spokes = 2_000;
+        config.geometry.pixels_per_spoke = 2_000;
+        assert!(config.validate().unwrap_err().contains("pixels"));
+
+        config = AppConfig::default();
+        config.output.pixels_per_universe = 171;
+        assert!(config.validate().unwrap_err().contains("pixels per universe"));
+
+        config = AppConfig::default();
+        config.output.start_universe = 63_999;
+        assert!(config.validate().unwrap_err().contains("universe"));
+    }
+
+    #[test]
+    fn config_file_lock_serializes_competing_process_style_writers() {
+        let path = test_path("file-lock");
+        let first = ConfigFileLock::acquire(&path).unwrap();
+        let path2 = path.clone();
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let waiter = std::thread::spawn(move || {
+            let _second = ConfigFileLock::acquire(&path2).unwrap();
+            ready_tx.send(()).unwrap();
+        });
+
+        assert!(
+            ready_rx
+                .recv_timeout(std::time::Duration::from_millis(100))
+                .is_err(),
+            "second writer acquired the lock before the first released it"
+        );
+        drop(first);
+        ready_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        waiter.join().unwrap();
+        std::fs::remove_file(path.with_extension("json.lock")).unwrap();
+    }
 
     #[test]
     fn config_without_rhythm_section_keeps_legacy_behavior() {

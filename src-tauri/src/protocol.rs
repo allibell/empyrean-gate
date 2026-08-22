@@ -323,6 +323,12 @@ pub struct RuntimeStatus {
     /// Output-path problem the operator must see (interface bind failed, socket
     /// unavailable). Packets may still flow — via the WRONG network interface.
     pub sacn_error: Option<String>,
+    /// A durable-save failure. The in-memory show continues, but the operator
+    /// must know that a restart could lose recent changes.
+    pub config_error: Option<String>,
+    /// Windows keep-awake failure; display/audio devices may disappear if the
+    /// machine follows its normal sleep policy during a show.
+    pub power_error: Option<String>,
     /// Frames rendered in each of the last ~30 one-second buckets (oldest first).
     pub fps_history: Vec<u32>,
     /// sACN packets sent in each of the last ~30 one-second buckets (oldest first).

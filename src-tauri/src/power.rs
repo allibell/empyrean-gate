@@ -7,8 +7,10 @@
 //! while sACN output is enabled (i.e. actually performing), so a dev machine
 //! with output off keeps its normal monitor timeout.
 
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+
+#[cfg(windows)]
+use std::sync::atomic::Ordering;
 
 use crate::state::SharedState;
 
@@ -35,6 +37,7 @@ fn run(state: Arc<SharedState>) {
     // ES_CONTINUOUS is per-thread state, so the flags must be (re)asserted from
     // this thread; the loop also picks up output-enabled changes.
     let mut last_flags = 0u32;
+    let mut last_error: Option<String> = None;
     while !state.shutdown.load(Ordering::Relaxed) {
         let output_on = state.config.read().output.enabled;
         let flags = ES_CONTINUOUS
@@ -47,7 +50,23 @@ fn run(state: Arc<SharedState>) {
             );
             last_flags = flags;
         }
-        unsafe { SetThreadExecutionState(flags) };
+        let result = unsafe { SetThreadExecutionState(flags) };
+        let error = (result == 0).then(|| {
+            format!(
+                "Windows could not block sleep: {}",
+                std::io::Error::last_os_error()
+            )
+        });
+        if error != last_error {
+            if let Some(message) = &error {
+                log::error!("keep-awake: {message}");
+            } else if last_error.is_some() {
+                log::info!("keep-awake recovered");
+            }
+            state.status.lock().power_error = error.clone();
+            state.broadcast_state();
+            last_error = error;
+        }
         std::thread::sleep(std::time::Duration::from_secs(30));
     }
     unsafe { SetThreadExecutionState(ES_CONTINUOUS) };

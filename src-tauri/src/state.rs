@@ -65,6 +65,32 @@ mod tests {
         assert!(!state.video.lock().active);
         assert!(state.video.lock().rgba.is_empty());
     }
+
+    #[test]
+    fn oversized_paint_batches_keep_only_the_newest_bounded_points() {
+        let state = SharedState::new(AppConfig::default());
+        let points: Vec<_> = (0..crate::layers::MAX_DABS + 100)
+            .map(|index| crate::layers::DabPoint {
+                angle: index as f32,
+                radius: 0.5,
+                dir: 0.0,
+            })
+            .collect();
+
+        state.paint(
+            crate::layers::PenKind::Glow,
+            &points,
+            0.0,
+            1.0,
+            1.0,
+            0.1,
+            1.0,
+        );
+
+        let dabs = state.dabs.lock();
+        assert_eq!(dabs.len(), crate::layers::MAX_DABS);
+        assert_eq!(dabs[0].angle, 100.0);
+    }
 }
 
 /// Raw audio shapes shipped to the GPU each frame: the recent waveform (a ring
@@ -210,6 +236,10 @@ impl Default for VideoInput {
 
 pub struct SharedState {
     pub config: RwLock<AppConfig>,
+    /// Serializes mutate -> snapshot -> durable save -> broadcast. Without this,
+    /// concurrent clients can race on config.json.tmp/.bak and an older snapshot
+    /// can overwrite a newer one after the config lock has been released.
+    config_save: Mutex<()>,
     /// Bumped on every config change; threads compare to notice reconfiguration.
     pub config_epoch: AtomicU32,
     pub effects: Mutex<Vec<ActiveEffect>>,
@@ -230,6 +260,10 @@ pub struct SharedState {
     /// sACN gated off while a takeover from an older instance is in progress
     /// (this instance must not send before the old one has stopped).
     pub sacn_hold: AtomicBool,
+    /// Set after the HTTP/WS listener owns the configured port. A successor whose
+    /// handover response was lost keeps sACN held until this proves the old
+    /// process has actually released its server.
+    pub server_bound: AtomicBool,
     /// Set once this instance has granted a handover: stop sACN immediately and
     /// shut down shortly after.
     pub leaving: AtomicBool,
@@ -269,6 +303,7 @@ impl SharedState {
         let (preview, _) = broadcast::channel(4);
         Arc::new(Self {
             config: RwLock::new(config),
+            config_save: Mutex::new(()),
             config_epoch: AtomicU32::new(0),
             effects: Mutex::new(Vec::new()),
             dabs: Mutex::new(Vec::new()),
@@ -282,6 +317,7 @@ impl SharedState {
             layer_phases: Mutex::new(Vec::new()),
             phases_transplanted: AtomicBool::new(false),
             sacn_hold: AtomicBool::new(false),
+            server_bound: AtomicBool::new(false),
             leaving: AtomicBool::new(false),
             sacn_quiesced: AtomicBool::new(false),
             sacn_terminated: AtomicBool::new(false),
@@ -310,12 +346,17 @@ impl SharedState {
 
     /// Mutate the config, persist it, and notify all clients with fresh state.
     pub fn update_config(&self, f: impl FnOnce(&mut AppConfig)) {
+        let _save = self.config_save.lock();
         let snapshot = {
             let mut cfg = self.config.write();
             f(&mut cfg);
             cfg.clone()
         };
-        crate::config::save(&snapshot);
+        let save_error = crate::config::save(&snapshot).err();
+        if let Some(error) = &save_error {
+            log::error!("failed to save config: {error}");
+        }
+        self.status.lock().config_error = save_error;
         self.bump_config();
         self.broadcast_state();
     }
@@ -339,10 +380,19 @@ impl SharedState {
         intensity: f32,
     ) {
         let mut dabs = self.dabs.lock();
+        // Retain only the newest bounded batch and evict old dabs once. Repeated
+        // Vec::remove(0) made a single oversized paint packet quadratic work on
+        // the engine machine.
+        let points = &points[points.len().saturating_sub(crate::layers::MAX_DABS)..];
+        let overflow = dabs
+            .len()
+            .saturating_add(points.len())
+            .saturating_sub(crate::layers::MAX_DABS);
+        if overflow > 0 {
+            let remove = overflow.min(dabs.len());
+            dabs.drain(..remove);
+        }
         for p in points {
-            if dabs.len() >= crate::layers::MAX_DABS {
-                dabs.remove(0);
-            }
             dabs.push(ActiveDab {
                 kind,
                 angle: p.angle,

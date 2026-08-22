@@ -291,6 +291,8 @@ export interface RuntimeStatus {
   sacn_universes: number;
   sacn_pps: number;
   sacn_error: string | null;
+  config_error: string | null;
+  power_error: string | null;
   fps_history: number[];
   pps_history: number[];
   clients: number;
