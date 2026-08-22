@@ -194,6 +194,16 @@ function UpdatesPanel({ config }: { config: AppConfig }) {
         />
         Install automatically when found
       </label>
+      <label className="toggle-row">
+        <input
+          type="checkbox"
+          checked={status?.startup_enabled ?? false}
+          disabled={!status?.startup_supported}
+          onChange={(e) => client.send({ type: "set_launch_at_startup", enabled: e.target.checked })}
+        />
+        Launch at Windows startup
+      </label>
+      <p className="hint">{status?.startup_state}</p>
     </section>
   );
 }

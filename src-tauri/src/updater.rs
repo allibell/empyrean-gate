@@ -62,8 +62,6 @@ pub fn spawn(state: Arc<SharedState>) {
 }
 
 fn updater_thread(state: Arc<SharedState>) {
-    cleanup_old_binaries();
-
     // First auto-check shortly after startup, then every CHECK_INTERVAL.
     let mut next_check = Instant::now() + Duration::from_secs(30);
     let mut latest: Option<(String, String)> = None; // (version, download url)
@@ -212,7 +210,7 @@ fn download_and_launch(version: &str, url: &str, state: &SharedState) -> anyhow:
 /// Delete versioned sibling binaries older than the running version. The running
 /// image can't be deleted on Windows (locked) and is skipped anyway; failures are
 /// ignored — cleanup is best-effort.
-fn cleanup_old_binaries() {
+pub(crate) fn cleanup_old_binaries() {
     let Ok(current_exe) = std::env::current_exe() else { return };
     let Some(dir) = current_exe.parent() else { return };
     let Some(cur) = parse_version(&effective_version()) else { return };

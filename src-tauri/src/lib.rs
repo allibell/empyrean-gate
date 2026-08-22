@@ -14,6 +14,7 @@ pub mod rhythm;
 pub mod sacn;
 pub mod server;
 pub mod state;
+pub mod startup;
 pub mod updater;
 pub mod videocache;
 pub mod firewall;
@@ -194,6 +195,13 @@ pub fn run(headless: bool) {
     let backend = start_backend();
     let state = backend.state.clone();
     state.headless.store(headless, Ordering::SeqCst);
+
+    // Refresh the shortcut before updater cleanup removes an older versioned
+    // executable that a previous launch may have targeted.
+    let launch_at_startup = state.config.read().windows.launch_at_startup;
+    startup::reconcile(launch_at_startup, headless).publish(&mut state.status.lock());
+    updater::cleanup_old_binaries();
+    state.broadcast_state();
 
     if headless {
         log::info!("headless mode: no desktop window; web UI only");

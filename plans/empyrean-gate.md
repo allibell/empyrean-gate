@@ -445,6 +445,18 @@ audit found the identity/lifecycle half of E1.31 was unimplemented.
 - Continue prioritizing deadline misses/p95-p99 frame time over mean frame time. The
   next known scaling optimization remains batched UDP I/O at 100k+ pixels.
 
+## Round 14: Windows launch at startup
+
+- [x] Added a Settings toggle backed by a per-user Windows Startup-folder shortcut;
+      it requires no administrator rights and reports the observed OS state or a
+      clear unsupported no-op on non-Windows platforms.
+- [x] The shortcut is rewritten to the running executable before updater cleanup,
+      so a successful self-update retargets it to the new versioned binary before
+      the old target can be removed. Desktop/headless launch mode is preserved.
+- [x] Startup changes use a dedicated WebSocket action and are persisted only after
+      the OS operation succeeds; stale full-config writes cannot toggle the shortcut.
+      Added focused legacy-config, protocol, and non-Windows behavior tests.
+
 ## Findings / gotchas
 
 - **wgpu 30 crashes (STATUS_ACCESS_VIOLATION) inside `vkCreateDevice` on this dev

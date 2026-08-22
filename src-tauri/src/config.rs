@@ -440,6 +440,9 @@ impl Default for UpdateConfig {
 pub struct WindowsConfig {
     /// Tabs with a popped-out window open (e.g. "control", "live").
     pub aux_open: Vec<String>,
+    /// Create a shortcut in this Windows user's Startup folder. The shortcut is
+    /// refreshed each launch so self-updated versioned binaries do not go stale.
+    pub launch_at_startup: bool,
 }
 
 /// A named, reusable capture of the layer stack and the motion settings that
@@ -729,6 +732,17 @@ mod tests {
         assert!(config.saved_playlists.is_empty());
         assert!(!config.show_scheduler.enabled);
         assert!(config.show_scheduler.active_playlist_id.is_empty());
+    }
+
+    #[test]
+    fn legacy_windows_config_does_not_enable_startup() {
+        let mut value = serde_json::to_value(AppConfig::default()).unwrap();
+        value["windows"]
+            .as_object_mut()
+            .unwrap()
+            .remove("launch_at_startup");
+        let config: AppConfig = serde_json::from_value(value).unwrap();
+        assert!(!config.windows.launch_at_startup);
     }
 
     #[test]

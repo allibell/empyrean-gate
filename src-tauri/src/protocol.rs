@@ -153,6 +153,10 @@ pub enum ClientMsg {
     CheckUpdate,
     /// Download + hot-swap to the staged update (two-phase takeover).
     InstallUpdate,
+    /// Windows only: create/remove this user's Startup-folder shortcut.
+    SetLaunchAtStartup {
+        enabled: bool,
+    },
     /// Phone orientation / motion, mapped onto the global control bus.
     Imu {
         /// Compass-ish heading in radians.
@@ -344,6 +348,12 @@ pub struct RuntimeStatus {
     /// clients may be blocked (and every new binary re-triggers the security
     /// prompt). The UI offers one-click authorization.
     pub firewall_pending: bool,
+    /// Whether this platform can create a per-user Startup-folder shortcut.
+    pub startup_supported: bool,
+    /// The shortcut's observed state (not merely the persisted preference).
+    pub startup_enabled: bool,
+    /// Human-readable result or unsupported/error note.
+    pub startup_state: String,
     /// Cache/download state per video playlist entry.
     pub video_cache: Vec<crate::videocache::VideoCacheStatus>,
     /// Known + connected client devices.
@@ -358,6 +368,23 @@ pub struct RuntimeStatus {
     pub update_state: String,
     pub video: VideoSourceStatus,
     pub show: ScheduledShowStatus,
+}
+
+#[cfg(test)]
+mod startup_tests {
+    use super::ClientMsg;
+
+    #[test]
+    fn launch_at_startup_message_is_explicitly_typed() {
+        let message: ClientMsg = serde_json::from_str(
+            r#"{"type":"set_launch_at_startup","enabled":true}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            message,
+            ClientMsg::SetLaunchAtStartup { enabled: true }
+        ));
+    }
 }
 
 #[cfg(test)]
